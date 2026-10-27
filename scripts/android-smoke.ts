@@ -20,6 +20,8 @@ const config: Config = { host: '127.0.0.1', port: 0, publicUrl: 'http://10.0.2.2
 const bridge = createBridge(config);
 const previousAccessibility = (await adb('shell', 'settings', 'get', 'secure', 'enabled_accessibility_services')).trim();
 const previousEnabled = (await adb('shell', 'settings', 'get', 'secure', 'accessibility_enabled')).trim();
+const previousWifi = (await adb('shell', 'settings', 'get', 'global', 'wifi_on')).trim();
+const previousData = (await adb('shell', 'settings', 'get', 'global', 'mobile_data')).trim();
 try {
   const address = await bridge.listen();
   if (!address || typeof address === 'string') throw new Error('No listening address');
@@ -46,6 +48,8 @@ try {
   if (!result.includes('OK (1 test)') || result.includes('FAILURES')) process.exitCode = 1;
 } finally {
   try {
+    await adb('shell', 'svc', 'wifi', previousWifi === '0' ? 'disable' : 'enable');
+    await adb('shell', 'svc', 'data', previousData === '0' ? 'disable' : 'enable');
     if (previousAccessibility === 'null' || previousAccessibility === '') await adb('shell', 'settings', 'delete', 'secure', 'enabled_accessibility_services');
     else await adb('shell', 'settings', 'put', 'secure', 'enabled_accessibility_services', previousAccessibility);
     await adb('shell', 'settings', 'put', 'secure', 'accessibility_enabled', previousEnabled === 'null' ? '0' : previousEnabled);

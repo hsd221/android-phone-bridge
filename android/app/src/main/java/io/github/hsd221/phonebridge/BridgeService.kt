@@ -71,11 +71,18 @@ class BridgeService : Service() {
     }
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) { scope.launch {
-            if (defaultNetwork != null && defaultNetwork != network) socket?.cancel()
+            if (defaultNetwork != null && defaultNetwork != network) {
+                BridgeNetwork.client.connectionPool.evictAll()
+                socket?.cancel()
+            }
             defaultNetwork = network
         } }
         override fun onLost(network: Network) { scope.launch {
-            if (defaultNetwork == network) { defaultNetwork = null; socket?.cancel() }
+            if (defaultNetwork == network) {
+                defaultNetwork = null
+                BridgeNetwork.client.connectionPool.evictAll()
+                socket?.cancel()
+            }
         } }
     }
     override fun onCreate() {

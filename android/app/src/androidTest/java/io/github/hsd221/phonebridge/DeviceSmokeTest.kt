@@ -39,7 +39,8 @@ class DeviceSmokeTest {
             assertFalse(envelope.toString(), envelope.has("error"))
             val result = envelope.getJSONObject("result")
             val content = result.getJSONArray("content").getJSONObject(0)
-            if (content.getString("type") == "image") return JSONObject().put("ok", true).put("data", content)
+            if (content.getString("type") == "image") return JSONObject(result.getJSONArray("content").getJSONObject(1).getString("text"))
+                .apply { getJSONObject("data").put("data", content.getString("data")) }
             return JSONObject(content.getString("text"))
         }
     }
@@ -80,7 +81,8 @@ class DeviceSmokeTest {
         }
         fail("UI never stabilized for $tool")
     }
-    private fun shell(command: String) { instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES).executeShellCommand(command).use { android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes() } }
+    private fun shell(command: String): String = instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES).executeShellCommand(command)
+        .use { android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes().toString(Charsets.UTF_8) }
     private suspend fun authorizeShizuku() {
         val support = ShizukuSupport(context)
         assertTrue("Start non-root Shizuku before the enhanced smoke test", support.status().optBoolean("running"))
@@ -141,6 +143,8 @@ class DeviceSmokeTest {
             val image = ok("phone_screenshot", JSONObject().put("maxDimension", 720))
             assertEquals("image/png", image.getString("mimeType"))
             assertTrue(image.getString("data").length > 100)
+            assertTrue(image.getInt("displayWidth") >= image.getInt("width"))
+            assertTrue(image.getInt("displayHeight") >= image.getInt("height"))
             val bounds = button.getJSONArray("bounds")
             ok("phone_tap", app().put("x", (bounds.getInt(0) + bounds.getInt(2)) / 2).put("y", (bounds.getInt(1) + bounds.getInt(3)) / 2))
             val display = context.resources.displayMetrics
@@ -170,6 +174,20 @@ class DeviceSmokeTest {
             ok("phone_status")
             prefs.setFlag("pausedAll", false); prefs.setFlag("pausedOperations", false); delay(200)
             shell("input keyevent KEYCODE_HOME") // Activity is closed; service remains available.
+            assertTrue(ok("phone_status").getBoolean("connected"))
+            // Interrupt actual Android networking, then restore it without opening the APK.
+            val wifiWasOn = shell("settings get global wifi_on").trim() != "0"
+            val dataWasOn = shell("settings get global mobile_data").trim() != "0"
+            try {
+                shell("svc data disable"); shell("svc wifi disable")
+                repeat(60) { if (BridgeService.connected) delay(100) }
+                assertFalse("Phone stayed connected after all Android networks were disabled", BridgeService.connected)
+            } finally {
+                shell("svc wifi ${if (wifiWasOn) "enable" else "disable"}")
+                shell("svc data ${if (dataWasOn) "enable" else "disable"}")
+            }
+            repeat(120) { if (!BridgeService.connected) delay(250) }
+            assertTrue("Phone did not reconnect after network recovery", BridgeService.connected)
             assertTrue(ok("phone_status").getBoolean("connected"))
             instrumentation.runOnMainSync { BridgeService.start(context, "reconnect") }
             delay(5000)
