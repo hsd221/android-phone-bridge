@@ -17,7 +17,7 @@ async function main() {
   if (positionals.length > 1) throw new Error('Unexpected positional arguments');
   if (command === 'init') { initConfig(values.config!); console.log(`Created ${values.config}; edit publicUrl before remote pairing`); return; }
   const config = loadConfig(values.config!);
-  const baseUrl = loopback(config.host) ? `${config.tls ? 'https' : 'http'}://${config.host === '::1' ? '[::1]' : config.host}:${config.port}` : config.publicUrl;
+  const baseUrl = !config.tls && loopback(config.host) ? `http://${config.host === '::1' ? '[::1]' : config.host}:${config.port}` : config.publicUrl;
   if (command === 'serve') {
     const bridge = createBridge(config);
     await bridge.listen();

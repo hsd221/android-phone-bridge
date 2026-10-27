@@ -99,7 +99,7 @@ export function createBridge(config: Config) {
     json(res, status, { error: status === 500 ? 'Internal bridge error' : error.message });
   }); });
   server.on('upgrade', (req, socket, head) => {
-    if (!validRequestOrigin(req) || new URL(req.url ?? '/', config.publicUrl).pathname !== '/device' || !identities.authenticate(bearer(req))) {
+    if (!validRequestOrigin(req) || req.url !== '/device' || !identities.authenticate(bearer(req))) {
       socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); return;
     }
     const deviceId = identities.device!.deviceId;

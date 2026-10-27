@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.json",
-  "compilerOptions": { "rootDir": "bridge", "noEmit": true },
-  "include": ["bridge/src/**/*.ts", "bridge/test/**/*.ts"]
+  "compilerOptions": { "rootDir": ".", "noEmit": true },
+  "include": ["bridge/src/**/*.ts", "bridge/test/**/*.ts", "scripts/**/*.ts"]
 }

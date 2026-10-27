@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -9,6 +9,7 @@ import { get } from 'node:http';
 import WebSocket from 'ws';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { createBridge } from '../src/server.js';
 import type { Config } from '../src/config.js';
 import { IdentityStore } from '../src/identity.js';
@@ -144,4 +145,19 @@ test('deadline sends cancellation and late results cannot resolve another reques
     ws.send(JSON.stringify({ type: 'result', id: request.id, deviceId: f.deviceId, result: { ok: false, error: { code: 'PAUSED', message: 'User paused all access' } } }));
     assert.equal((await next).error.code, 'PAUSED');
   } finally { await f.close(); }
+});
+
+test('stdio CLI forwards MCP calls to the running authenticated bridge', async () => {
+  const f = await fixture();
+  const client = new Client({ name: 'stdio-harness', version: '1' });
+  const configPath = join(f.config.stateFile, '..', 'config.json');
+  try {
+    await writeFile(configPath, JSON.stringify({ ...f.config, port: Number(new URL(f.base).port), publicUrl: f.base }));
+    await client.connect(new StdioClientTransport({ command: process.execPath,
+      args: ['--import', 'tsx', 'bridge/src/cli.ts', 'mcp', '--config', configPath] }));
+    assert.equal((await client.listTools()).tools.length, 9);
+    const result = await client.callTool({ name: 'phone_status', arguments: {} });
+    assert.equal(result.isError, true);
+    assert.equal(JSON.parse((result.content as any[])[0].text).error.code, 'PHONE_OFFLINE');
+  } finally { await client.close(); await f.close(); }
 });

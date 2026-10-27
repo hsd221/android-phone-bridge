@@ -1,6 +1,7 @@
 package io.github.hsd221.phonebridge
 
 import android.Manifest
+import android.app.UiAutomation
 import android.content.Intent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -56,13 +57,49 @@ class DeviceSmokeTest {
             if (last!!.optBoolean("ok") && last!!.getJSONObject("data").getString("packageName") == demo) return last!!.getJSONObject("data")
             Thread.sleep(300)
         }
-        fail("Demo UI unavailable: $last"); throw IllegalStateException()
+        val windows = PhoneAccessibilityService.instance?.windows?.joinToString { window ->
+            val bounds = android.graphics.Rect().also(window::getBoundsInScreen)
+            "${window.root?.packageName}:type=${window.type},layer=${window.layer},active=${window.isActive},focused=${window.isFocused},visible=${window.root?.isVisibleToUser},bounds=$bounds"
+        }
+        fail("Demo UI unavailable: $last; windows=$windows"); throw IllegalStateException()
     }
     private fun node(ui: JSONObject, key: String, value: String): JSONObject {
         val nodes = ui.getJSONArray("nodes")
         return (0 until nodes.length()).map(nodes::getJSONObject).first { it.optString(key) == value }
     }
-    private fun shell(command: String) { instrumentation.uiAutomation.executeShellCommand(command).use { android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes() } }
+    private fun actOnFreshNode(tool: String, key: String, value: String, args: JSONObject) {
+        repeat(8) {
+            val target = node(awaitUi(), key, value)
+            val result = mcp(tool, JSONObject(args.toString()).put("nodeId", target.getString("nodeId")))
+            if (result.optBoolean("ok")) return
+            val error = result.getJSONObject("error")
+            // Only a confirmed pre-dispatch stale-node refusal permits a newly observed action.
+            assertEquals(result.toString(), "STALE_NODE", error.getString("code"))
+            assertFalse(error.optBoolean("outcomeUnknown"))
+            Thread.sleep(300)
+        }
+        fail("UI never stabilized for $tool")
+    }
+    private fun shell(command: String) { instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES).executeShellCommand(command).use { android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes() } }
+    private suspend fun authorizeShizuku() {
+        val support = ShizukuSupport(context)
+        assertTrue("Start non-root Shizuku before the enhanced smoke test", support.status().optBoolean("running"))
+        if (!support.status().optBoolean("available")) {
+            instrumentation.runOnMainSync { support.requestPermission() }
+            repeat(40) {
+                if (support.status().optBoolean("available")) return
+                val root = instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES).rootInActiveWindow
+                val allow = root?.findAccessibilityNodeInfosByText("Allow all the time")?.firstOrNull()
+                if (allow != null) {
+                    var button = allow
+                    while (button != null && !button.isClickable) button = button.parent
+                    button?.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
+                }
+                delay(200)
+            }
+        }
+        assertTrue("Shizuku was not authorized as UID 2000", support.status().optBoolean("available"))
+    }
 
     @Test fun endToEnd() = runBlocking {
         assertNull("Smoke test refuses to replace an existing phone identity", prefs.identity)
@@ -73,6 +110,12 @@ class DeviceSmokeTest {
                 context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
             instrumentation.waitForIdleSync()
+            // Instrumentation restarts the target process; rebind the test service after that restart.
+            shell("settings delete secure enabled_accessibility_services")
+            delay(700) // Let AccessibilityManager observe disable before enabling again.
+            shell("settings put secure enabled_accessibility_services ${context.packageName}/.PhoneAccessibilityService")
+            shell("settings put secure accessibility_enabled 1")
+            repeat(40) { if (PhoneAccessibilityService.instance == null) delay(100) }
             instrumentation.runOnMainSync { BridgeService.start(context) }
             repeat(60) { if (!BridgeService.connected) delay(250) }
             assertTrue("Phone did not connect", BridgeService.connected)
@@ -80,15 +123,19 @@ class DeviceSmokeTest {
             prefs.setFlag("pausedAll", false)
             Capability.entries.forEach { prefs.setFlag("cap_${it.name}", true) }
             prefs.setApp(demo, AppAccess(read = true, operate = true))
+            // API 35 exposes navigation and status bars as real, visible windows.
+            // Explicitly authorize those test-system packages, rather than bypassing the policy.
+            prefs.setApp("com.android.launcher3", AppAccess(read = true, operate = true))
+            prefs.setApp("com.android.systemui", AppAccess(read = true, operate = true))
             delay(200)
-            assertTrue(ok("phone_status").getJSONObject("permissions").getBoolean("accessibility"))
-            ok("phone_open_app", app())
+            val initialStatus = ok("phone_status")
+            assertTrue(initialStatus.toString(), initialStatus.getJSONObject("permissions").getBoolean("accessibility"))
+            assertEquals("accessibility", ok("phone_open_app", app()).getString("path"))
             var ui = awaitUi()
-            val input = node(ui, "description", "测试输入框")
-            ok("phone_input", app().put("text", "bridge smoke").put("nodeId", input.getString("nodeId")))
+            actOnFreshNode("phone_input", "description", "测试输入框", app().put("text", "bridge smoke"))
             ui = awaitUi()
             val button = node(ui, "text", "确认测试")
-            ok("phone_tap", app().put("nodeId", button.getString("nodeId")))
+            actOnFreshNode("phone_tap", "text", "确认测试", app())
             ui = awaitUi()
             assertTrue(ui.toString().contains("已确认：bridge smoke"))
             val image = ok("phone_screenshot", JSONObject().put("maxDimension", 720))
@@ -129,6 +176,15 @@ class DeviceSmokeTest {
             assertTrue(ok("phone_status").getBoolean("connected"))
             ok("phone_open_app", app()); awaitUi()
             ok("phone_back", app())
+            if (arguments.getString("shizuku") == "true") {
+                authorizeShizuku()
+                prefs.shizukuEnabled = true; delay(200)
+                val enhanced = ok("phone_status").getJSONObject("shizuku")
+                assertTrue(enhanced.getBoolean("available")); assertEquals(2000, enhanced.getInt("uid"))
+                assertEquals("shizuku", ok("phone_open_app", app()).getString("path"))
+                awaitUi()
+                prefs.shizukuEnabled = false
+            }
             assertTrue(BridgeNetwork.revoke(identity))
             prefs.identity = null
             delay(200)
