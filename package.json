@@ -1,0 +1,27 @@
+{
+  "name": "android-phone-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Self-hosted MCP bridge for an Android phone",
+  "engines": { "node": ">=22" },
+  "bin": { "phone-bridge": "dist/cli.js" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "test": "tsx --test bridge/test/*.test.ts",
+    "start": "node dist/cli.js",
+    "dev": "tsx bridge/src/cli.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "ws": "8.22.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.0",
+    "tsx": "4.23.15",
+    "typescript": "~5.9.3"
+  }
+}
