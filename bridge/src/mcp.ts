@@ -14,7 +14,9 @@ export function createMcpServer(call: Caller) {
       if (tool === 'phone_screenshot' && result.ok) {
         const data = result.data as { base64?: unknown; mimeType?: unknown } | null;
         if (data && typeof data.base64 === 'string' && data.mimeType === 'image/png') {
-          return { content: [{ type: 'image' as const, data: data.base64, mimeType: 'image/png' }], isError: false };
+          const { base64: _base64, ...metadata } = data;
+          return { content: [{ type: 'image' as const, data: data.base64, mimeType: 'image/png' },
+            { type: 'text' as const, text: JSON.stringify({ ok: true, data: metadata }) }], isError: false };
         }
       }
       return { content: [{ type: 'text' as const, text: JSON.stringify(result) }], isError: !result.ok };

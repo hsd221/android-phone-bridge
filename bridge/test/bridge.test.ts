@@ -100,6 +100,7 @@ test('real MCP client lists and calls phone tools, including image content', asy
     assert.equal(status.isError, false);
     const image = await client.callTool({ name: 'phone_screenshot', arguments: {} });
     assert.equal((image.content as any[])[0].type, 'image');
+    assert(!JSON.parse((image.content as any[])[1].text).data.base64, 'metadata must not duplicate image bytes');
     const invalid = await client.callTool({ name: 'phone_tap', arguments: { packageName: 'com.example.app', x: 12 } });
     assert.equal(invalid.isError, true);
   } finally { await client.close(); await f.close(); }

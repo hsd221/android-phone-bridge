@@ -24,17 +24,19 @@ class PhoneAccessibilityService : AccessibilityService() {
     companion object { @Volatile var instance: PhoneAccessibilityService? = null; private set }
     private val prefs by lazy { BridgePrefs(this) }
     private var uiEpoch = 0L
+    private var windowEpoch = 0L
     private var snapshotEpoch = -1L
     private var snapshotWindow = -1
     private val paths = mutableMapOf<String, List<Int>>()
     override fun onServiceConnected() { instance = this }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
-        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED || event.windowId == snapshotWindow) invalidate()
+        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) invalidate()
+        else if (event.windowId == snapshotWindow) { uiEpoch++; paths.clear(); snapshotEpoch = -1 }
     }
     override fun onInterrupt() { invalidate() }
     override fun onDestroy() { instance = null; invalidate(); super.onDestroy() }
-    fun invalidate() { uiEpoch++; paths.clear(); snapshotEpoch = -1 }
+    fun invalidate() { uiEpoch++; windowEpoch++; paths.clear(); snapshotEpoch = -1 }
 
     private fun authorizePackage(name: String, operation: Boolean) {
         if (name == packageName) throw ToolFailure("APP_DENIED", "手机工具桥设置仅允许用户在本机操作")
@@ -161,7 +163,7 @@ class PhoneAccessibilityService : AccessibilityService() {
     }
     suspend fun screenshot(maxDimension: Int, ensure: () -> Unit): JSONObject {
         ensure(); authorizedRoot("phone_screenshot")
-        val epoch = uiEpoch
+        val epoch = windowEpoch
         return suspendCancellableCoroutine { continuation ->
             takeScreenshot(Display.DEFAULT_DISPLAY, mainExecutor, object : TakeScreenshotCallback {
                 override fun onFailure(errorCode: Int) {
@@ -173,11 +175,13 @@ class PhoneAccessibilityService : AccessibilityService() {
                     try {
                         if (!continuation.isActive) return
                         ensure(); authorizedRoot("phone_screenshot")
-                        if (epoch != uiEpoch) throw ToolFailure("UI_CHANGED", "截图期间窗口变化，画面已丢弃")
+                        if (epoch != windowEpoch) throw ToolFailure("UI_CHANGED", "截图期间窗口变化，画面已丢弃")
                         val hardware = Bitmap.wrapHardwareBuffer(buffer, screenshot.colorSpace) ?: throw ToolFailure("SCREENSHOT_UNAVAILABLE", "无法读取系统截图")
                         bitmap = hardware.copy(Bitmap.Config.ARGB_8888, false)
                         hardware.recycle()
                         val source = bitmap ?: throw ToolFailure("SCREENSHOT_UNAVAILABLE", "无法转换截图")
+                        val displayWidth = source.width
+                        val displayHeight = source.height
                         val ratio = (maxDimension.toFloat() / maxOf(source.width, source.height)).coerceAtMost(1f)
                         if (ratio < 1f) {
                             bitmap = Bitmap.createScaledBitmap(source, (source.width * ratio).roundToInt().coerceAtLeast(1), (source.height * ratio).roundToInt().coerceAtLeast(1), true)
@@ -188,6 +192,7 @@ class PhoneAccessibilityService : AccessibilityService() {
                         if (output.size() > 6 * 1024 * 1024) throw ToolFailure("SCREENSHOT_TOO_LARGE", "请降低 maxDimension 后重新截图")
                         ensure()
                         continuation.resume(JSONObject().put("mimeType", "image/png").put("width", bitmap!!.width).put("height", bitmap!!.height)
+                            .put("displayWidth", displayWidth).put("displayHeight", displayHeight)
                             .put("capturedAt", System.currentTimeMillis()).put("base64", Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)))
                     } catch (error: Exception) { if (continuation.isActive) continuation.resumeWithException(error) }
                     finally { bitmap?.recycle(); buffer.close() }
