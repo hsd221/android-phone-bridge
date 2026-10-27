@@ -22,7 +22,11 @@ export class PhoneBroker {
         if (socket !== this.socket) return;
         const message: unknown = JSON.parse(raw.toString());
         const hello = z.object({ type: z.literal('hello'), protocol: z.literal(1), deviceId: z.literal(deviceId) }).passthrough().safeParse(message);
-        if (hello.success) { this.ready = true; clearTimeout(helloTimer); return; }
+        if (hello.success) {
+          this.ready = true; clearTimeout(helloTimer);
+          socket.send(JSON.stringify({ type: 'ready', protocol: 1, deviceId }));
+          return;
+        }
         if (!this.ready || socket !== this.socket) return;
         const parsed = z.object({ type: z.literal('result'), id: z.string().uuid(), deviceId: z.literal(deviceId), result: resultSchema }).strict().parse(message);
         const pending = this.pending.get(parsed.id);

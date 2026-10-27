@@ -2,7 +2,7 @@ package io.github.hsd221.phonebridge
 
 enum class Capability { LOCATION, UI, SCREENSHOT, OPERATE }
 data class AppAccess(val read: Boolean = false, val operate: Boolean = false)
-class ToolFailure(val code: String, override val message: String) : Exception(message)
+class ToolFailure(val code: String, override val message: String, val outcomeUnknown: Boolean = false) : Exception(message)
 
 data class AccessPolicy(
     val pausedAll: Boolean = false,

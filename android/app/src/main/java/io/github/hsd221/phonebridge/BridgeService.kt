@@ -60,6 +60,7 @@ class BridgeService : Service() {
     private val epoch = AtomicLong(0)
     private val jobs = mutableMapOf<String, Job>()
     private val mutex = Mutex()
+    private var defaultNetwork: Network? = null
     var locationForeground = false; private set
     private val changes = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         epoch.incrementAndGet()
@@ -69,8 +70,13 @@ class BridgeService : Service() {
         updateNotification()
     }
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) { scope.launch { socket?.cancel() } }
-        override fun onLost(network: Network) { scope.launch { socket?.cancel() } }
+        override fun onAvailable(network: Network) { scope.launch {
+            if (defaultNetwork != null && defaultNetwork != network) socket?.cancel()
+            defaultNetwork = network
+        } }
+        override fun onLost(network: Network) { scope.launch {
+            if (defaultNetwork == network) { defaultNetwork = null; socket?.cancel() }
+        } }
     }
     override fun onCreate() {
         super.onCreate()
@@ -125,7 +131,7 @@ class BridgeService : Service() {
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) { scope.launch {
                 if (!continuation.isActive || prefs.identity != identity) { webSocket.cancel(); return@launch }
-                connected = true; linkStatus = "已连接"; updateNotification()
+                linkStatus = "正在验证连接"; updateNotification()
                 webSocket.send(JSONObject().put("type", "hello").put("protocol", 1).put("deviceId", identity.deviceId).toString())
             } }
             override fun onMessage(webSocket: WebSocket, text: String) { scope.launch {
@@ -134,6 +140,12 @@ class BridgeService : Service() {
                 try {
                     val message = JSONObject(text)
                     when (message.getString("type")) {
+                        "ready" -> {
+                            if (message.getInt("protocol") != 1 || message.getString("deviceId") != identity.deviceId) {
+                                webSocket.close(1008, "Identity mismatch"); return@launch
+                            }
+                            connected = true; linkStatus = "已连接"; updateNotification()
+                        }
                         "request" -> accept(message, webSocket, identity)
                         "cancel" -> jobs[message.getString("id")]?.cancel(CancellationException("Bridge 已取消请求"))
                         else -> webSocket.close(1008, "Unknown message")
@@ -180,7 +192,7 @@ class BridgeService : Service() {
                         JSONObject().put("ok", true).put("data", tools.execute(tool, args, ensure))
                     }
                 }
-            } catch (failure: ToolFailure) { error(failure.code, failure.message, operation && started) }
+            } catch (failure: ToolFailure) { error(failure.code, failure.message, failure.outcomeUnknown) }
             catch (_: kotlinx.coroutines.TimeoutCancellationException) { error("TIMEOUT", "请求或系统能力获取超时，已派发的操作可能已执行", operation && started) }
             catch (_: CancellationException) { error("CANCELLED", "请求已取消；已交给系统的动作可能已执行", operation && started) }
             catch (_: SecurityException) { error("PERMISSION_REQUIRED", "Android 系统拒绝访问，请检查权限", operation && started) }

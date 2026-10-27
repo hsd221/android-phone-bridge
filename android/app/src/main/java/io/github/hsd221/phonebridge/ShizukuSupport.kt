@@ -50,7 +50,7 @@ class ShizukuSupport(private val context: Context) {
             ensure()
             if (launcher.uid() != 2000) throw ToolFailure("SHIZUKU_UNAVAILABLE", "仅支持非 Root Shizuku")
             val result = withContext(Dispatchers.IO) { ensure(); launcher.launch(component.packageName, component.className) }
-            if (result != 0) throw ToolFailure("ACTION_REJECTED", "Shizuku 应用启动失败：$result")
+            if (result != 0) throw ToolFailure("ACTION_REJECTED", "Shizuku 应用启动失败：$result", outcomeUnknown = result == -4)
             return JSONObject().put("accepted", true).put("path", "shizuku")
         } finally { connection?.let { runCatching { Shizuku.unbindUserService(args, it, true) } } }
     }

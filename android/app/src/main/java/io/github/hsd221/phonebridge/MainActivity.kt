@@ -43,9 +43,9 @@ class MainActivity : Activity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         prefs = BridgePrefs(this)
         window.setDecorFitsSystemWindows(false)
+        render()
         val lightBars = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
         window.insetsController?.setSystemBarsAppearance(lightBars, lightBars)
-        render()
     }
     override fun onResume() {
         super.onResume(); BridgeService.activityVisible = true

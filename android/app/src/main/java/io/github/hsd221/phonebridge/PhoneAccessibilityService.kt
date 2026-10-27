@@ -28,7 +28,10 @@ class PhoneAccessibilityService : AccessibilityService() {
     private var snapshotWindow = -1
     private val paths = mutableMapOf<String, List<Int>>()
     override fun onServiceConnected() { instance = this }
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) { uiEpoch++; paths.clear() }
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event == null) return
+        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED || event.windowId == snapshotWindow) invalidate()
+    }
     override fun onInterrupt() { invalidate() }
     override fun onDestroy() { instance = null; invalidate(); super.onDestroy() }
     fun invalidate() { uiEpoch++; paths.clear(); snapshotEpoch = -1 }
@@ -132,7 +135,7 @@ class PhoneAccessibilityService : AccessibilityService() {
         val accepted = dispatchGesture(GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, duration)).build(),
             object : GestureResultCallback() {
                 override fun onCompleted(gestureDescription: GestureDescription?) { if (continuation.isActive) continuation.resume(JSONObject().put("accepted", true)) }
-                override fun onCancelled(gestureDescription: GestureDescription?) { if (continuation.isActive) continuation.resumeWithException(ToolFailure("GESTURE_CANCELLED", "手势被系统或用户输入打断")) }
+                override fun onCancelled(gestureDescription: GestureDescription?) { if (continuation.isActive) continuation.resumeWithException(ToolFailure("GESTURE_CANCELLED", "手势被系统或用户输入打断", outcomeUnknown = true)) }
             }, null)
         invalidate()
         if (!accepted && continuation.isActive) continuation.resumeWithException(ToolFailure("ACTION_REJECTED", "Android 拒绝了手势"))
