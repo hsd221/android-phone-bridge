@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.PhoneBridge" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#17665B</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:statusBarColor">#F3F6F3</item>
+        <item name="android:navigationBarColor">#F3F6F3</item>
+    </style>
+</resources>
