@@ -1,0 +1,9 @@
+{
+  "host": "127.0.0.1",
+  "port": 8787,
+  "publicUrl": "https://phone-bridge.example.com",
+  "harnessToken": "GENERATE_WITH_phone-bridge_init_DO_NOT_USE_THIS_VALUE",
+  "stateFile": "bridge-state.json",
+  "requestTimeoutMs": 30000,
+  "allowInsecureLan": false
+}
