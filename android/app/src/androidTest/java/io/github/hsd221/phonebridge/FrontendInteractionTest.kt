@@ -369,7 +369,8 @@ class FrontendInteractionTest {
                     assertTrue("Touch-down committed navigation before release", activity.findViewById<Button>(R.id.nav_connection).isSelected)
                     val released = android.os.SystemClock.uptimeMillis()
                     motion(button, MotionEvent.ACTION_CANCEL)
-                    observe(button, released, restored, restoredAt) { button.scaleX >= .999f }
+                    // Isolate the next click from the preceding return animation's final frames.
+                    observe(button, released, restored, restoredAt) { button.scaleX == 1f }
                 }
                 assertTrue("Cancelled press never returned to its resting scale", restored.await(3, TimeUnit.SECONDS))
                 assertTrue("Cancelled press took too long to recover", restoredAt.get() < 350)
