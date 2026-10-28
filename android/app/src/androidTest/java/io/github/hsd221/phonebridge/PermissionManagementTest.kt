@@ -49,13 +49,13 @@ class PermissionManagementTest {
             assertTrue(prefs.preferences.edit().clear().commit())
         }
     }
-    private fun eventually(description: String, condition: () -> Boolean) {
+    private fun eventually(description: String, diagnostics: () -> String = { "" }, condition: () -> Boolean) {
         val deadline = android.os.SystemClock.elapsedRealtime() + 10000
         while (android.os.SystemClock.elapsedRealtime() < deadline) {
             if (condition()) return
             Thread.sleep(100)
         }
-        fail(description)
+        fail("$description ${diagnostics()}")
     }
     private fun shell(command: String) = instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
         .executeShellCommand(command).use { android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes().toString(Charsets.UTF_8) }
@@ -124,9 +124,13 @@ class PermissionManagementTest {
                 restored
             }
             scenario.onActivity { it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
-            eventually("Landscape layout has no usable application list or lost its selection") {
+            var landscapeDetails = ""
+            eventually("Landscape layout has no usable application list or lost its selection", { landscapeDetails }) {
                 var usable = false
                 scenario.onActivity {
+                    landscapeDetails = "orientation=${it.resources.configuration.orientation}, screenHeightDp=${it.resources.configuration.screenHeightDp}, " +
+                        "listHeightDp=${it.findViewById<ListView>(R.id.app_permission_list).height / it.resources.displayMetrics.density}, " +
+                        "summary=${it.findViewById<TextView>(R.id.app_permission_summary).text}"
                     usable = it.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE &&
                         it.findViewById<ListView>(R.id.app_permission_list).height >= 80 * it.resources.displayMetrics.density &&
                         it.findViewById<TextView>(R.id.app_permission_summary).text.contains("已选 2 个")

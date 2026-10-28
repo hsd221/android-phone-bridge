@@ -49,6 +49,7 @@ class AppPermissionsActivity : Activity() {
     private var filtered = emptyList<AppEntry>()
     private var accesses = emptyMap<String, AppAccess>()
     private var loaded = false
+    private var compactHeight = false
     private val ink = Color.rgb(30, 48, 44)
     private val green = Color.rgb(23, 102, 91)
     private val adapter = object : BaseAdapter() {
@@ -86,9 +87,12 @@ class AppPermissionsActivity : Activity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         window.setDecorFitsSystemWindows(false)
         prefs = BridgePrefs(this)
+        compactHeight = resources.configuration.screenHeightDp < 400
         selected.addAll(savedInstanceState?.getStringArrayList("selectedApps") ?: emptyList())
+        val topPadding = if (compactHeight) 4 else 8
+        val bottomPadding = if (compactHeight) 4 else 12
         val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(8), dp(16), dp(12))
+            orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(topPadding), dp(16), dp(bottomPadding))
             setBackgroundColor(Color.rgb(243, 246, 243))
         }
         val heading = row(root)
@@ -129,7 +133,7 @@ class AppPermissionsActivity : Activity() {
         setContentView(root)
         root.setOnApplyWindowInsetsListener { view, insets ->
             val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.ime())
-            view.setPadding(dp(16) + bars.left, dp(8) + bars.top, dp(16) + bars.right, dp(12) + bars.bottom); insets
+            view.setPadding(dp(16) + bars.left, dp(topPadding) + bars.top, dp(16) + bars.right, dp(bottomPadding) + bars.bottom); insets
         }
         val lightBars = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
         window.insetsController?.setSystemBarsAppearance(lightBars, lightBars)
@@ -202,7 +206,7 @@ class AppPermissionsActivity : Activity() {
         bulkButton.isEnabled = loaded && selected.isNotEmpty()
         selectButton.isEnabled = loaded && filtered.isNotEmpty()
         allButton.isEnabled = loaded
-        scopeNote.text = getString(R.string.app_permission_scope, apps.size)
+        scopeNote.text = getString(if (compactHeight) R.string.app_permission_scope_compact else R.string.app_permission_scope, apps.size)
     }
     private fun batchActions() {
         val targets = selected.toSet()

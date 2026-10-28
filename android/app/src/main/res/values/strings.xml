@@ -7,6 +7,7 @@
     <string name="app_permission_hidden">（筛选外 %1$d 个）</string>
     <string name="app_permission_bulk">批量设置（%1$d）</string>
     <string name="app_permission_scope">一键开启：列表全部 %1$d 个应用（含筛选外）的读取/操作与四项能力。系统权限在主页授予；未列出或新装应用默认禁止，可添加包名。</string>
+    <string name="app_permission_scope_compact">覆盖列表全部 %1$d 个应用及四项能力；系统权限需单独授予。</string>
     <string name="system_permission_state">%1$s：%2$s</string>
     <string name="app_access_summary">已配置 %1$d 个应用 · 允许读取 %2$d 个 · 允许操作 %3$d 个</string>
 </resources>
