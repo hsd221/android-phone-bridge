@@ -16,3 +16,9 @@ bridge-state.json
 *.keystore
 artifacts/
 .DS_Store
+
+# Personal development inputs and local agent instructions.
+/DEMO-SPEC.md
+/TODO.md
+/AGENTS.md
+/internal/

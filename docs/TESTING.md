@@ -53,9 +53,9 @@ npm run test:android:boot -- emulator-5554
 | Windows 11 本机部署 | 无本机环境 | 待设备测试 |
 | 真实手机切网、厂商省电、休眠和重启 | 当前无连接的真实手机 | 待设备测试 |
 
-已通过的完整 CI：[Demo checks #40538594832](https://github.com/hsd221/android-phone-bridge/actions/runs/40538594832)。Android SDK 安装显式指定 `platform-tools`、`platforms;android-35` 和 `build-tools;35.0.0`，避免安装已经下架的旧 `tools` 包。每次推送自动运行上述四个任务，并提供主 APK、测试应用 APK 和 lint 报告的私有构建产物。
+已通过的完整 CI：[Demo checks #40538594832](https://github.com/hsd221/android-phone-bridge/actions/runs/40538594832)。Android SDK 安装显式指定 `platform-tools`、`platforms;android-35` 和 `build-tools;35.0.0`，避免安装已经下架的旧 `tools` 包。每次推送自动运行上述四个任务，并提供主 APK、测试应用 APK 和 lint 报告的构建产物。
 
-2026-10-28 的 0.1.1 权限管理修改已在本地通过 Debug/测试 APK 构建、三组 JVM 测试、lint（无问题）、三组权限模拟器检查及原有 MCP 模拟器闭环；横屏布局调整后再次通过权限模拟器检查。此次按用户要求暂停真机联调；更细的权限粒度仅记录于 [TODO.md](../TODO.md)。
+2026-10-28 的 0.1.1 权限管理修改已在本地通过 Debug/测试 APK 构建、三组 JVM 测试、lint（无问题）、三组权限模拟器检查及原有 MCP 模拟器闭环。发布前另在与 CI 相同的 320×640、160dpi 小屏模拟器上修复横屏列表空间不足，再次通过权限检查和完整 MCP 闭环；保留原有列表至少 80dp 的断言。此轮未进行真机联调。
 
 ## 人工验收步骤
 

@@ -1,8 +1,8 @@
 # Android Phone Bridge · 首版 Demo
 
-用原生 APK 将安卓手机的按次定位、可见界面、截图和基本操作连接到你自己的 Harness。手机主动连接自部署 Bridge，Bridge 提供 MCP。项目工作名仍未确定，当前仓库私有，许可与公开发布另行决定。
+用原生 APK 将安卓手机的按次定位、可见界面、截图和基本操作连接到你自己的 Harness。手机主动连接自部署 Bridge，Bridge 提供 MCP。
 
-范围见 [DEMO-SPEC.md](DEMO-SPEC.md)，实现选择见 [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md)，实际验证状态见 [docs/TESTING.md](docs/TESTING.md)。
+当前实现见 [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md)，实际验证状态见 [docs/TESTING.md](docs/TESTING.md)。
 
 ## 运行 Bridge
 
@@ -37,6 +37,8 @@ cd android
 - 主 APK：`android/app/build/outputs/apk/debug/app-debug.apk`
 - 独立测试应用：`android/demo/build/outputs/apk/debug/demo-debug.apk`
 - 最低 Android 11（API 30），无需 Root。
+
+打包后的 APK 通过本仓库的 [GitHub Releases](https://github.com/hsd221/android-phone-bridge/releases) 交付，当前使用 **prerelease** 预发布版本，附 SHA-256 校验文件。
 
 安装主 APK，完成配对；在手机中开放所需能力、授予系统定位和无障碍权限，再给具体应用配置读取/操作权限。所有能力和 App 默认禁止。Android 安装来源可能要求在应用详情中先允许“受限制的设置”，再开启无障碍。
 
