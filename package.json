@@ -11,6 +11,7 @@
     "check": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
     "test": "tsx --test bridge/test/*.test.ts",
     "test:android": "tsx scripts/android-smoke.ts",
+    "test:android:boot": "tsx scripts/android-boot.ts",
     "start": "node dist/cli.js",
     "dev": "tsx bridge/src/cli.ts"
   },

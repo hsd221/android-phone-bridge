@@ -24,11 +24,14 @@ Android JVM 测试覆盖默认拒绝、读取/操作分权、两类暂停、状�
 ```sh
 npm run test:android -- emulator-5554
 npm run test:android -- emulator-5554 --shizuku
+npm run test:android:boot -- emulator-5554
 ```
 
 **仅限专用模拟器。** 脚本要求显式的 `emulator-*` 序列号，会安装并清除工具桥和测试应用的数据、授予测试系统权限、临时配置无障碍、注入模拟定位并切断/恢复测试网络。结束时恢复此前的无障碍和网络设置，撤销临时 Bridge 身份并关闭服务。它不接受个人手机序列号。`--shizuku` 需要先安装并以 UID 2000 启动 Shizuku，测试会在其系统弹窗中授予工具桥权限。
 
 脚本创建临时 Bridge，通过模拟器的 `10.0.2.2` 主动出站连接主机，不使用 ADB 转发维持日常工具链。instrumentation 作为 Harness，实际通过 `/mcp` 发起工具请求。具体断言见 `DeviceSmokeTest.kt`，包括基本工具、默认拒绝和被禁止 App、操作暂停、排队任务取消、全部暂停、页面关闭后的状态调用、重新连接和解绑。
+
+`test:android:boot` 另行安装并清除主 APK 数据，配置临时身份和测试权限，再重启整个模拟器。`BootProvisionTest.kt` 仅负责重启前的配对；instrumentation 退出后，由主机上的官方 MCP SDK 客户端验证自动连接、无障碍、定位前台服务、后台打开测试应用、读 UI 和定位。重启后不打开主 APK，只模拟用户解锁无 PIN 的测试设备。测试要求已授予后台定位，不能据此推断有 PIN 的真机在首次解锁前可用。连接恢复以手机实际返回的 MCP 响应为准；不以重启前尚未过期的 TCP 连接判断在线，也不重试操作。
 
 ## 本次记录
 
@@ -41,9 +44,13 @@ npm run test:android -- emulator-5554 --shizuku
 | Android 15 模拟器 MCP 完整闭环 | API 35 / 默认 x86_64 镜像 | 已通过，`OK (1 test)`，21.387 秒 |
 | 可选 Shizuku 增强及完整基础流程 | Shizuku 13.6.0 / 非 Root / UID 2000 | 已通过，`OK (1 test)`，24.436 秒 |
 | 实际网络中断与自动恢复 | API 35 模拟器，关闭 Wi-Fi/数据后恢复 | 已通过，无需重新打开 APK |
-| Windows Bridge CI | GitHub Windows runner | 待运行；CI 系统不等于 Windows 11 实机 |
+| 完整重启后的后台恢复 | API 35 模拟器，后台定位已授权、无 PIN | 已通过；主机独立 MCP Harness 验证连接、无障碍、定位前台服务、后台启动 App、UI 和定位 |
+| Windows / Ubuntu Bridge CI | GitHub `windows-latest` / `ubuntu-latest` | 类型检查、8 项测试及构建均通过；CI 系统不等于 Windows 11 实机 |
+| Android CI | GitHub Ubuntu runner / API 35 模拟器 | 构建、JVM 测试、lint、完整 MCP 闭环均通过 |
 | Windows 11 本机部署 | 无本机环境 | 待设备测试 |
 | 真实手机切网、厂商省电、休眠和重启 | 当前无连接的真实手机 | 待设备测试 |
+
+已通过的完整 CI：[Demo checks #40538594832](https://github.com/hsd221/android-phone-bridge/actions/runs/40538594832)。Android SDK 安装显式指定 `platform-tools`、`platforms;android-35` 和 `build-tools;35.0.0`，避免安装已经下架的旧 `tools` 包。每次推送自动运行上述四个任务，并提供主 APK、测试应用 APK 和 lint 报告的私有构建产物。
 
 ## 人工验收步骤
 
