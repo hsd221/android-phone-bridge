@@ -51,18 +51,23 @@ class DeviceSmokeTest {
         val result = mcp(tool, args); assertFalse(result.toString(), result.getBoolean("ok")); assertEquals(code, result.getJSONObject("error").getString("code"))
     }
     private fun app() = JSONObject().put("packageName", demo)
-    private fun awaitUi(): JSONObject {
+    private fun awaitUi(expectedText: String? = null): JSONObject {
         var last: JSONObject? = null
         repeat(30) {
             last = mcp("phone_ui")
-            if (last!!.optBoolean("ok") && last!!.getJSONObject("data").getString("packageName") == demo) return last!!.getJSONObject("data")
+            if (last!!.optBoolean("ok")) {
+                val data = last!!.getJSONObject("data")
+                val nodes = data.getJSONArray("nodes")
+                val observed = expectedText == null || (0 until nodes.length()).any { nodes.getJSONObject(it).optString("text") == expectedText }
+                if (data.getString("packageName") == demo && observed) return data
+            }
             Thread.sleep(300)
         }
         val windows = PhoneAccessibilityService.instance?.windows?.joinToString { window ->
             val bounds = android.graphics.Rect().also(window::getBoundsInScreen)
             "${window.root?.packageName}:type=${window.type},layer=${window.layer},active=${window.isActive},focused=${window.isFocused},visible=${window.root?.isVisibleToUser},bounds=$bounds"
         }
-        fail("Demo UI unavailable: $last; windows=$windows"); throw IllegalStateException()
+        fail("Demo UI unavailable (expected text=$expectedText): $last; windows=$windows"); throw IllegalStateException()
     }
     private fun node(ui: JSONObject, key: String, value: String): JSONObject {
         val nodes = ui.getJSONArray("nodes")
@@ -135,10 +140,10 @@ class DeviceSmokeTest {
             assertEquals("accessibility", ok("phone_open_app", app()).getString("path"))
             var ui = awaitUi()
             actOnFreshNode("phone_input", "description", "测试输入框", app().put("text", "bridge smoke"))
-            ui = awaitUi()
+            ui = awaitUi("bridge smoke")
             val button = node(ui, "text", "确认测试")
             actOnFreshNode("phone_tap", "text", "确认测试", app())
-            ui = awaitUi()
+            ui = awaitUi("已确认：bridge smoke")
             assertTrue(ui.toString().contains("已确认：bridge smoke"))
             val image = ok("phone_screenshot", JSONObject().put("maxDimension", 720))
             assertEquals("image/png", image.getString("mimeType"))
