@@ -1,101 +1,74 @@
-# Android Phone Bridge · 首版 Demo
+# Android Phone Bridge
 
-用原生 APK 将安卓手机的按次定位、可见界面、截图和基本操作连接到你自己的 Harness。手机主动连接自部署 Bridge，Bridge 提供 MCP。
+> 基于 MCP（Model Context Protocol）协议将安卓手机能力暴露给外部 AI Agent 的桥接系统。
 
-当前实现见 [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md)，实际验证状态见 [docs/TESTING.md](docs/TESTING.md)。
+---
 
-## 运行 Bridge
+### 项目背景与初衷
 
-需要 Node.js 22+。Ubuntu 和 Windows 使用同一命令，Windows 可在 PowerShell 中执行。
+Anthropic 的 Computer Use 让我们看到了大模型直接与操作系统图形界面交互的巨大潜力。用户可以让 Agent 观察屏幕、定位坐标并执行操作，从而在电脑端自主完成复杂任务。
 
-```sh
-npm ci
-npm run build
-node dist/cli.js init --config bridge.config.json
-node dist/cli.js serve --config bridge.config.json
-```
+然而在日常生活中，大量关键信息、即时通知和生活场景实际上沉淀在安卓手机中。如果能够把手机的屏幕感知与交互能力同样安全地暴露给外部 Agent，大模型就能走出电脑桌面，真正融入更多现实场景。
 
-`init` 生成独立的随机 Harness 令牌，不覆盖现有文件。保持此窗口运行，在另一个终端生成配对码：
+在规划该项目时，我们确立了由浅入深的三个核心目标：
 
-```sh
-node dist/cli.js pair --config bridge.config.json
-node dist/cli.js status --config bridge.config.json
-```
+1. **理解上下文（核心优先级）**：首先赋予 Agent 感知手机端状态、屏幕内容与即时上下文的能力，让它了解用户当前所处的环境；
+2. **协助操作**：在用户明确授权的前提下，帮助用户在手机上完成界面查找、点击、滑动与文本输入等日常操作；
+3. **探索行动分身（长远目标）**：在安全机制足够完备的前提下，逐步探索代理用户账号处理特定事务的可能性。
 
-默认只监听 `127.0.0.1:8787`，此地址不能直接用于另一台手机。配对前按 [部署说明](docs/DEPLOYMENT.md) 设置稳定且手机可达的 HTTPS 地址、配置 `publicUrl` 并重启 Bridge。手机填写 HTTPS 根地址和配对码；不要把 Harness 令牌输入手机。配对码有效五分钟且只能使用一次。
+首版实现选择务实落地，**聚焦于单次实时的感知与基础操作闭环**，历史数据采集与事件订阅留待后续版本扩展。
 
-## 构建与配置手机
+#### 核心设计考量
 
-需要 JDK 17、Android SDK Platform 35 和 Build Tools 35.0.0，设置 `ANDROID_HOME`。首次构建会下载固定版本 Gradle 和依赖。
+- **手机定位于纯粹的感知与执行工具**：  
+  移动端应用不承载复杂的学习与推理逻辑，仅作为外部 Agent 的“眼睛与双手”。所有的认知、规划与决策完全交由宿主机上运行的 Agent Harness（例如 Claude Desktop 或自建系统）处理，保持移动端轻量稳定。
+- **以普通未 Root 设备为基础，兼顾现实与安全性**：  
+  - **为什么暂不考虑 Root？** 现实中绝大多数日常主力机均未 Root，且当前缺乏已 Root 的真机环境进行可靠的实机测试；因此首版以普通设备为基础，未来待项目成熟且有相应测试条件时再做评估。
+  - **为什么首版暂不提供通用 Shell？** 任意命令行执行入口风险极高，必须配套专门、独立的权限审查机制；为了收敛首版验证范围并守住安全底线，通用 Shell 延后至后续版本逐步引入，首版仅提供已封装好的确定性工具。
+  - **为什么将 Shizuku 纳入规划？** ADB 与 Shizuku 明确在项目系统能力计划内。在免 Root 前提下，原生无障碍后台调起某些应用可能存在限制或延迟，引入 Shizuku 能够以受控的方式显著提升应用拉起的稳定性与速度。
+- **人机协同与用户最高控制权**：  
+  在控制权规则上，用户始终拥有最高优先级，可随时收回控制。我们并未将“用户正在使用手机”一律作为禁止 AI 操作的硬性条件，因为现实中存在大量人机协同场景；经用户明确授权，AI 在用户使用手机期间亦可执行操作。系统通过能力与应用默认全拒绝、细粒度分权授权，以及在手机前台通知中提供即时“暂停操作”或“暂停全部访问”，确保用户对控制权拥有绝对掌控。
+- **手机主动出站，适配移动网络**：  
+  移动网络（Wi-Fi 与蜂窝数据）经常切换且处于运营商 NAT 之后，手机无法直接作为服务端监听入站端口。系统采用中继拓扑：手机作为客户端主动向 Bridge 建立 WebSocket 长连接，Bridge 再向上通过标准 MCP 协议对接外部系统，免去了复杂的内网穿透与公网端口监听。
+- **支持自建与多用户独立部署**：  
+  系统面向具备自行部署能力的用户设计，不依赖集中式的公共服务，支持任何人独立部署 Bridge 并连接自己的手机与 Agent。
 
-```sh
-cd android
-./gradlew :app:assembleDebug :demo:assembleDebug
-# Windows PowerShell：.\gradlew.bat :app:assembleDebug :demo:assembleDebug
-```
+---
 
-- 主 APK：`android/app/build/outputs/apk/debug/app-debug.apk`
-- 独立测试应用：`android/demo/build/outputs/apk/debug/demo-debug.apk`
-- 最低 Android 11（API 30），无需 Root。
+### 核心能力一览
 
-打包后的 APK 通过本仓库的 [GitHub Releases](https://github.com/hsd221/android-phone-bridge/releases) 交付，当前使用 **prerelease** 预发布版本，附 SHA-256 校验文件。
+- **9 项核心 MCP 工具**：
+  - 感知：设备状态 (`phone_status`)、实时定位 (`phone_location`)、界面层级 (`phone_ui`)、屏幕截图 (`phone_screenshot`)
+  - 操作：启动应用 (`phone_open_app`)、模拟点击 (`phone_tap`)、手势滑动 (`phone_swipe`)、文本输入 (`phone_input`)、系统返回 (`phone_back`)
+- **细粒度权限控制**：
+  - 默认全部拒绝，支持针对每个应用分别配置“读取”与“操作”权限；
+  - 提供应用搜索、批量多选授权与一键全开配置；
+  - 手机端通知栏支持快捷“暂停操作”或“暂停全部访问”。
+- **可靠的通信与异常处理**：
+  - 手机主动发起出站 WebSocket 长连接，断网自动退避重连；
+  - 手机凭据基于 Android Keystore (AES-GCM) 硬件级加密保存，Bridge 端仅存储散列值；
+  - 请求包含唯一 ID 与超时时间戳，超时或断网绝不重放副作用操作。
+- **可选 Shizuku 增强**：在免 Root 前提下，支持通过 Shizuku 进一步提升后台调起应用的效率。
 
-安装主 APK，完成配对；在手机中开放所需能力、授予系统定位和无障碍权限，再给具体应用配置读取/操作权限。所有能力和 App 默认禁止。Android 安装来源可能要求在应用详情中先允许“受限制的设置”，再开启无障碍。
+---
 
-在“按应用授权 → 搜索与批量管理应用权限”中，按应用名或包名搜索，勾选多个应用后点“批量设置”，可允许读取、允许操作、全部允许或全部禁止。单独允许读取或操作会保留另一项原有设置。搜索时保留已选项，“全选搜索结果”只增加当前结果，“清空选择”清除全部选择。每行“配置”仍可单独调整；“添加包名”可配置没有启动入口或系统无法列出的键盘、系统窗口等包名。
+### 文档导航
 
-“一键全部开启”会一次保存**列表内全部应用**的读取/操作与四项桥接能力，不受搜索条件影响；它不改变暂停状态，也不自动授权将来安装或未列出的应用。“能力授权”另有四项能力全开/全关。系统无障碍、精确/大概定位、后台定位、定位开关、通知（含连接通知类别）、电池优化、后台限制和 Shizuku 的当前状态会显示在各自设置入口旁，在页面可见时及从设置返回后自动刷新。厂商自启动没有统一查询接口，会标明“需手动确认”。Android 系统权限需经系统授权流程开启。
+具体的部署流程、通信协议规范与架构设计详见以下技术文档：
 
-截图使用系统无障碍截图授权，不额外申请屏幕录制会话。安全窗口、锁屏、应用限制、未授权的键盘/系统弹窗/分屏/覆盖层会导致拒绝。主 APK 的设置始终禁止被远程读取或操作。
+- 🚀 **[部署与使用指南 (docs/DEPLOYMENT.md)](docs/DEPLOYMENT.md)**  
+  Bridge 服务构建与启动、一次性配对码生成、手机端 APK 编译与安装、Agent Harness 接入（Streamable HTTP 与 stdio 模式）及生产反向代理配置。
+- 📐 **[技术实现与架构设计 (docs/IMPLEMENTATION.md)](docs/IMPLEMENTATION.md)**  
+  模块职责划分、主动出站中继架构、无障碍截图实现机制、双重凭证隔离与安全边界考量。
+- 🔌 **[通信协议规范 (docs/PROTOCOL.md)](docs/PROTOCOL.md)**  
+  Bridge 与手机端的 WebSocket 握手协议、消息格式契约、屏幕物理坐标换算公式与 21 个标准错误码速查。
+- 🧪 **[测试与设备验收记录 (docs/TESTING.md)](docs/TESTING.md)**  
+  自动化测试执行命令、Android 模拟器端到端闭环断言、CI 跨平台验证矩阵及真机验收规范。
 
-首次授予权限后启动连接，再关闭 APK 页面。前台通知显示连接和暂停入口。按厂商要求允许后台、自启动并关闭省电限制。后台定位建议允许“始终允许”；非 Root Shizuku 重启后需重新启动。系统休眠、强停和后台限制仍可能中断服务。
+---
 
-## 接入 Harness
+### 安装包交付
 
-Streamable HTTP 配置（令牌来自本地 `bridge.config.json`，不提交到仓库）：
+构建生成的测试 APK 通过本仓库的 [GitHub Releases](https://github.com/hsd221/android-phone-bridge/releases) 交付。
 
-```json
-{
-  "mcpServers": {
-    "phone": {
-      "url": "https://phone-bridge.example.com/mcp",
-      "headers": { "Authorization": "Bearer <harnessToken>" }
-    }
-  }
-}
-```
-
-只支持 stdio 的 Harness 在 Bridge 电脑上使用：
-
-```json
-{
-  "mcpServers": {
-    "phone": {
-      "command": "node",
-      "args": ["/absolute/path/android-phone-bridge/dist/cli.js", "mcp", "--config", "/absolute/path/bridge.config.json"]
-    }
-  }
-}
-```
-
-Windows 将绝对路径替换为例如 `C:/Users/you/android-phone-bridge/dist/cli.js`。本地 Bridge 必须已启动；配置文件和状态文件相对路径基于配置文件所在目录。
-
-提供九个工具：状态、定位、读界面、截图、打开 App、点击、滑动、输入和返回。先读 UI 再选择控件；操作后再读 UI 判断结果。输入工具设置文字，不自动提交。断线和超时不重放操作，`outcomeUnknown` 表示结果不确定，Harness 不能直接重试提交。
-
-## 验证与解绑
-
-```sh
-npm run check
-npm test
-npm run build
-cd android
-./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :demo:assembleDebug
-```
-
-在手机中可暂停操作、暂停全部或解除配对。离线解绑会立即停用本机访问，恢复网络后撤销 Bridge 旧身份；要立刻从 Bridge 端撤销：
-
-```sh
-node dist/cli.js revoke --config bridge.config.json
-```
-
-完整验收步骤、设备记录和已知边界见 [docs/TESTING.md](docs/TESTING.md)。协议与错误状态见 [docs/PROTOCOL.md](docs/PROTOCOL.md)。
+当前阶段均以 **prerelease**（预发布版本）形式提供，发布包内附带对应的 `SHA256SUMS` 校验文件供核验完整性。

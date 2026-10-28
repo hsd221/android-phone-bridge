@@ -1,68 +1,243 @@
-# 手机协议 v1
+# 手机桥接协议规范 (Protocol v1)
 
-Bridge HTTP 根地址由用户配置。手机以 `POST /pair` 交换一次性配对码，之后主动以 WebSocket 连接 `/device`。远程使用 HTTPS/WSS；标准系统证书校验必须保留，不跳过证书验证。开发明文需要 Bridge 和 APK 两端明确开启。
+本文档记录 Bridge 服务与 Android 手机客户端之间的底层通信协议，包括配对握手、WebSocket 会话管理、消息格式以及 MCP 工具映射。
 
-## 身份和配对
+---
 
-`POST /admin/pair` 需要 Harness Bearer 身份，产生 64 bit 随机十六进制配对码，有效期五分钟，重新生成使前码失效。Bridge 每分钟最多接受 30 次配对尝试。`POST /pair` 的 JSON：
+## 一、连接基线
 
-```json
-{"code":"ONE_TIME_CODE","deviceId":"a UUID","label":"phone label"}
+1. **传输安全**：
+   - 生产环境中，所有通信必须通过 TLS 加密（HTTPS 与 WSS）。
+   - 手机端强制执行系统默认证书链校验，不接受任意自签名或不安全证书。
+   - 仅在本地开发调试模式下，且 Bridge 与 APK 两端均显式开启明文开关时，才允许使用明文 HTTP/WS。
+2. **连接方向**：
+   - 手机端始终作为客户端，主动向 Bridge 提供的 `/device` 路径建立出站 WebSocket 长连接。
+
+---
+
+## 二、身份认证与设备配对
+
+Bridge 采用“一次性临时配对码 ➔ 换取长期设备令牌 ➔ 散列化保存”的流程。系统目前只支持一对一绑定，绑定新手机前必须先解除旧设备。
+
+### 1. 生成配对码（Bridge 端）
+管理端或 CLI 调用 Bridge 生成配对码：
+- **接口**：`POST /admin/pair`
+- **鉴权**：Header 携带 `Authorization: Bearer <harnessToken>`
+- **规则**：
+  - 生成一个 16 位字符（64-bit 熵）的大写十六进制字符串，有效期为 5 分钟。
+  - 每次重新生成配对码，之前的配对码立即失效。
+
+### 2. 交换设备身份（手机端）
+手机端连通网络后，向 Bridge 发起配对：
+- **接口**：`POST /pair`
+- **频率限制**：Bridge 实例每分钟全局最多接受 30 次配对交换尝试。
+- **请求负载 (JSON)**：
+  ```json
+  {
+    "code": "ONE_TIME_CODE",
+    "deviceId": "00000000-0000-0000-0000-000000000000",
+    "label": "My Pixel Phone"
+  }
+  ```
+- **成功响应**：
+  ```json
+  {
+    "protocol": 1,
+    "deviceId": "00000000-0000-0000-0000-000000000000",
+    "token": "256-bit-random-secret-token"
+  }
+  ```
+- **凭证保存方式**：
+  - **Bridge 端**：计算设备令牌的 SHA-256 哈希值，写入受权限保护的本地文件（`bridge-state.json`）。Bridge 本身绝不落盘明文令牌。
+  - **手机端**：将返回的长期令牌通过 Android Keystore（AES-GCM）加密保存在私有目录，且禁止系统云备份（`allowBackup="false"`）。
+
+---
+
+## 三、WebSocket 会话管理
+
+配对成功后，手机端向 Bridge 的 `/device` 路径建立长连接。
+
+### 1. 握手流程
+建立 WebSocket 时，手机端需在 HTTP 请求头中附加设备令牌（严禁将令牌作为 URL 参数传递）：
+```http
+Authorization: Bearer <phone-token>
 ```
 
-成功返回 `deviceId`、`protocol: 1` 和 256 bit `token`。只配一个设备；已配对后必须先解绑。Bridge 将令牌 SHA-256 散列写入权限受限的本机状态文件，手机将身份用 Android Keystore AES-GCM 加密保存在私有存储，禁用备份。
+连接建立后的交互：
+1. **手机端发送 Hello**（连接后 10 秒内必须发送，超时会被切断连接）：
+   ```json
+   {
+     "type": "hello",
+     "protocol": 1,
+     "deviceId": "00000000-0000-0000-0000-000000000000"
+   }
+   ```
+2. **Bridge 验证并回复 Ready**：
+   ```json
+   {
+     "type": "ready",
+     "protocol": 1,
+     "deviceId": "00000000-0000-0000-0000-000000000000"
+   }
+   ```
+   收到 `ready` 消息后，手机端界面才会更新为“已连接”。
 
-WebSocket 请求头为 `Authorization: Bearer <phone-token>`，不将令牌放进 URL。手机先发送：
+### 2. 心跳与重连
+- 双方按周期发送 WebSocket Ping/Pong；若连续超时未收到响应则切断连接。
+- 当同一设备重新发起连接时，Bridge 会主动切断旧连接，并将原连接上尚未处理完毕的请求标记为失败。
 
-```json
-{"type":"hello","protocol":1,"deviceId":"a UUID"}
-```
+### 3. 解除配对与凭证撤销
+- **在线撤销**：
+  - 手机端发起：`DELETE /device/revoke`（使用手机 Bearer 令牌）。
+  - 管理端发起：`POST /admin/revoke`（使用 Harness Bearer 令牌）。
+  - 撤销成功后，Bridge 立即删除哈希记录并切断当前长连接。
+- **离线解绑处理**：
+  - 若手机在无网状态下被用户手动解绑，APK 会立即销毁本地加密身份，拒绝一切外部调用。
+  - 同时手机端会把待撤销凭证加密暂存，在网络恢复后自动通知 Bridge。
+  - 在 Bridge 侧，管理员也可以随时执行 `node dist/cli.js revoke` 直接单方面撤销旧设备。
 
-十秒内没有 hello 会断开。Bridge 核对后发送 `{"type":"ready","protocol":1,"deviceId":"设备 UUID"}`，手机收到后才显示已连接。Bridge 和手机分别发送 WebSocket ping；无响应后重连。同一设备的新连接替换旧连接并使旧连接上的未完成请求失败。
+---
 
-`DELETE /device/revoke` 使用手机 Bearer；`POST /admin/revoke` 使用 Harness Bearer。成功撤销后旧身份不能再次连接，并关闭当前会话。手机离线解绑时先停止本地访问并删除活动身份，再保留加密撤销请求重试；**网络恢复前 Bridge 上的散列无法立即删除**，可在 Bridge 本地运行 `revoke` 立即撤销。待撤销期间 APK 不允许重新配对。
+## 四、请求调度与执行规范
 
-## 请求
+Bridge 将来自 MCP 的工具调用封装为 JSON 请求包发送给手机端。
 
+### 1. 请求数据结构
 ```json
 {
   "type": "request",
   "protocol": 1,
-  "deviceId": "a UUID",
-  "id": "a unique UUID",
+  "deviceId": "00000000-0000-0000-0000-000000000000",
+  "id": "e2a1b3c4-d5e6-7890-abcd-ef0123456789",
   "issuedAt": 1793140000000,
   "expiresAt": 1793140030000,
   "tool": "phone_tap",
-  "args": {"packageName":"com.example.test","x":100,"y":200}
+  "args": {
+    "packageName": "com.example.app",
+    "x": 360,
+    "y": 720
+  }
 }
 ```
 
-时间为 Unix 毫秒。默认期限 30 秒，最长 60 秒；手机核对身份、协议、ID、时钟和期限，在执行前再次核对期限和手机端权限。手机对近期 ID 去重，最多八个待处理请求且串行执行。每次 UI 读取返回新快照的 `nodeId`，发生无障碍窗口事件、读取新快照、操作或重连后旧 ID 失效。
+- **时间戳与超时**：使用毫秒级 Unix 时间戳。默认超时为 30 秒（最长不超过 60 秒）。
+- **调度语义**：
+  - **严格串行**：手机端最多排队 8 个请求，所有动作按顺序串行执行。
+  - **去重与校验**：手机端维护近期请求 ID 列表防重放；在真正执行前，会再次核验权限、暂停状态以及请求是否已超时（`expiresAt`）。
+  - **UI 快照有效性**：`phone_ui` 返回的节点编号（`nodeId`）仅对当前快照有效。一旦发生界面跳变、手势操作或网络重连，旧 `nodeId` 立即失效。
 
-工具及完整参数以 `bridge/src/protocol.ts` 的 schema 为准：`phone_status`、`phone_location`、`phone_ui`、`phone_screenshot`、`phone_open_app`、`phone_tap`、`phone_swipe`、`phone_input`、`phone_back`。屏幕坐标是默认显示器的实际像素；截图可以缩放，MCP 同时返回图片和尺寸元信息。图片中的 `(x, y)` 应转换为 `(x × displayWidth / width, y × displayHeight / height)` 后用于坐标操作。
+### 2. 工具列表与坐标体系
 
-## 结果和取消
+协议目前支持 9 项核心工具（具体参数详见 `bridge/src/protocol.ts`）：
+- `phone_status`：查询设备连接状态、Android 系统版本、两级暂停标志、能力开关、按应用授权清单及 Shizuku 运行状态。
+- `phone_location`：获取设备当前定位（经纬度、精度及时间戳）。
+- `phone_ui`：获取当前可见窗口的无障碍节点树与文本内容。
+- `phone_screenshot`：获取屏幕截屏（返回图片 Base64 与物理分辨率元数据）。
+- `phone_open_app`：启动指定包名的应用。
+- `phone_tap`：根据屏幕物理坐标模拟轻触。
+- `phone_swipe`：指定起始与终点坐标模拟滑动。
+- `phone_input`：向当前聚焦的文本框输入字符。
+- `phone_back`：触发系统物理返回键。
 
+> **坐标换算说明**：  
+> 触摸与手势操作均基于手机主屏幕的物理像素坐标。调用 `phone_screenshot` 时，为了节省带宽，返回的截图可能经过等比缩放。MCP 会在返回图像的同时附带 `displayWidth`、`displayHeight` 以及图片的实际 `width`、`height`。  
+> 换算公式为：  
+> `实际 X = x * displayWidth / width`  
+> `实际 Y = y * displayHeight / height`
+
+---
+
+## 五、响应、取消与错误体系
+
+### 1. 结果消息格式
+**成功响应**：
 ```json
-{"type":"result","id":"request UUID","deviceId":"device UUID","result":{"ok":true,"data":{"accepted":true}}}
+{
+  "type": "result",
+  "id": "e2a1b3c4-d5e6-7890-abcd-ef0123456789",
+  "deviceId": "00000000-0000-0000-0000-000000000000",
+  "result": {
+    "ok": true,
+    "data": {
+      "accepted": true
+    }
+  }
+}
+```
+> **注意**：`accepted: true` 仅代表系统无障碍服务已成功派发该手势指令，并不保证界面业务逻辑产生预期变化。Agent 应在操作后主动调用 `phone_ui` 或 `phone_screenshot` 进行确认。
+
+**失败响应**：
+```json
+{
+  "type": "result",
+  "id": "e2a1b3c4-d5e6-7890-abcd-ef0123456789",
+  "deviceId": "00000000-0000-0000-0000-000000000000",
+  "result": {
+    "ok": false,
+    "error": {
+      "code": "APP_DENIED",
+      "message": "未授权访问目标应用：com.example.app"
+    }
+  }
+}
 ```
 
+### 2. 取消与防重放保证
+Bridge 可主动发送取消消息：
 ```json
-{"type":"result","id":"request UUID","deviceId":"device UUID","result":{"ok":false,"error":{"code":"APP_DENIED","message":"未授权访问应用"}}}
+{
+  "type": "cancel",
+  "id": "e2a1b3c4-d5e6-7890-abcd-ef0123456789"
+}
 ```
+- 当用户在手机端点击暂停、修改权限、解除配对或网络中断时，手机端会立即丢弃队列中尚未执行的所有排队请求。
+- **不可撤销操作的保护**：若手势指令已经提交给 Android 底层，其结果无法保证撤回。在网络中断导致确认丢失时，错误信息会标记 `"outcomeUnknown": true`。
+- **严禁重放**：无论是 Bridge 还是手机端，**在网络重连后绝不会重新发送或执行先前的任何变动指令**。
 
-Bridge 接受的结果必须来自当前会话且请求 ID 与设备匹配。错误通过 MCP `isError: true` 和结构化文本返回；截图以 MCP image 内容返回。`accepted` 只代表 Android 接受动作，不保证业务结果，Harness 应再次调用 UI 或截图观察。
+### 3. 标准错误码速查表
 
-取消消息为 `{"type":"cancel","id":"request UUID"}`。手机权限变化、暂停、解除配对、连接变化均取消排队任务。已经派发的系统操作不保证可撤回，结果不确定时错误携带 `outcomeUnknown: true`。Bridge 离线、断线、超时与重连均**不重放请求**；过期或迟到结果丢弃。暂停后 status 仍可返回不含界面、位置或截图的权限诊断。
+| 错误码 | 说明 |
+| :--- | :--- |
+| `PHONE_OFFLINE` | 手机当前未连接到 Bridge。 |
+| `BRIDGE_UNAVAILABLE` | Bridge 内部服务异常或请求转发失败。 |
+| `TIMEOUT` | 请求在指定超时时间内未收到响应。 |
+| `CANCELLED` | 请求在排队期间被显式取消或被用户事件打断。 |
+| `EXPIRED` | 请求到达手机端时已超出过期时间戳。 |
+| `REPLAY_REJECTED` | 检测到重复的请求 ID，拒绝执行。 |
+| `BUSY` | 手机端请求队列已满（超出 8 个）。 |
+| `PAUSED` | 用户在手机端开启了“暂停全部访问”。 |
+| `OPERATIONS_PAUSED` | 用户在手机端开启了“暂停操作”（读取类能力仍可能可用）。 |
+| `CAPABILITY_DENIED` | 请求对应的能力开关（如定位、截屏）未开启。 |
+| `APP_DENIED` | 目标应用包名未加入用户的读取或操作白名单。 |
+| `APP_CHANGED` | 预期操作的前台应用在动作触发瞬间发生了切换。 |
+| `STALE_NODE` | 目标 `nodeId` 已失效，UI 树已发生变化。 |
+| `PERMISSION_REQUIRED` | 缺少对应的 Android 系统权限（如普通定位权限未授予）。 |
+| `BACKGROUND_LOCATION_REQUIRED`| 缺少系统“始终允许”后台定位权限。 |
+| `ACCESSIBILITY_UNAVAILABLE` | 手机无障碍服务未启用或被系统强行终止。 |
+| `DEVICE_LOCKED` | 设备处于锁屏或熄屏状态。 |
+| `UI_UNAVAILABLE` | 无法从无障碍服务获取当前界面的节点信息。 |
+| `WINDOW_UNAVAILABLE` | 检测到安全窗口、密码键盘或未授权的系统覆盖层。 |
+| `SCREENSHOT_UNAVAILABLE` | 系统拒绝了截图请求（如处于受安全保护的界面）。 |
+| `LOCATION_UNAVAILABLE` | 定位服务不可用或长时间无法获取位置。 |
 
-主要错误：`PHONE_OFFLINE`、`BRIDGE_UNAVAILABLE`、`TIMEOUT`、`CANCELLED`、`EXPIRED`、`REPLAY_REJECTED`、`BUSY`、`PAUSED`、`OPERATIONS_PAUSED`、`CAPABILITY_DENIED`、`APP_DENIED`、`APP_CHANGED`、`STALE_NODE`、`PERMISSION_REQUIRED`、`BACKGROUND_LOCATION_REQUIRED`、`ACCESSIBILITY_UNAVAILABLE`、`DEVICE_LOCKED`、`UI_UNAVAILABLE`、`WINDOW_UNAVAILABLE`、`SCREENSHOT_UNAVAILABLE`、`LOCATION_UNAVAILABLE`。
+---
 
-## Harness 接口
+## 六、Harness / Agent 接口
 
-- `POST /mcp`：官方 SDK 实现的无状态 MCP Streamable HTTP，使用独立 Harness Bearer。GET/DELETE 不提供 SSE 会话，返回 405。
-- `phone-bridge mcp --config <file>`：stdio MCP，通过同一配置的受认证 HTTP 端点转发至运行中的 Bridge。
-- `POST /api/call`：stdio 适配的内部入口，同样需要 Harness Bearer，参数为 `{"tool":"phone_status","args":{}}`。
-- `GET /admin/status`：Harness Bearer，返回连接和配对元信息；不返回手机原始内容或令牌。
-- `GET /health`：仅返回协议及服务存活状态，不包含设备信息。
+Bridge 对外提供以下 HTTP / stdio 接口供外部 Agent 接入：
 
-非信任 Origin 和 Host 被拒绝。Bridge 不记录工具内容，不提供 Shell、历史采集、任意网络代理或应用私有数据库接口。
+1. **`POST /mcp`**：
+   - 基于官方 MCP SDK 实现的 Streamable HTTP 接口；
+   - Header 需提供 `Authorization: Bearer <harnessToken>`；
+   - 不支持无状态长轮询 SSE 会话，GET/DELETE 请求将返回 405 Method Not Allowed。
+2. **`phone-bridge mcp --config <file>`**：
+   - 本地 stdio 适配器入口，供仅支持标准输入输出子进程的 MCP 客户端调用；
+   - 内部通过 HTTP 本地回环将命令转发给正在运行的 Bridge 主进程。
+3. **`POST /api/call`**：
+   - 用于调试的直接调用入口，同样需要 Harness 鉴权，请求体为 `{"tool":"phone_status","args":{}}`。
+4. **`GET /admin/status`**：
+   - 返回当前设备的在线状态与已配对设备元信息（设备 ID 与标签，不泄露设备令牌与私有数据；协议版本请通过 `GET /health` 获取）。
+5. **`GET /health`**：
+   - 基础存活探针，返回服务就绪状态。
+
+> **安全过滤**：Bridge 会严格校验 HTTP 请求中的 `Host` 与 `Origin`，直接拒绝非预期的跨站请求或未信任域名调用。
