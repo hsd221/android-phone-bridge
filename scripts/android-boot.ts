@@ -88,7 +88,15 @@ try {
   await adb('shell', 'input', 'keyevent', 'KEYCODE_MENU'); // Simulates the user unlocking a PIN-free test device.
   const launched = await tool('phone_open_app', { packageName: 'io.github.hsd221.phonebridge.demo' });
   assert.equal(launched.path, 'accessibility');
-  await until(async () => (await tool('phone_ui')).packageName === 'io.github.hsd221.phonebridge.demo', 'background app launch', 20);
+  await until(async () => {
+    const value = await response('phone_ui');
+    if (value.ok) return value.data.packageName === 'io.github.hsd221.phonebridge.demo';
+    // The accessibility service can briefly expose a window without a root while Android
+    // finishes switching activities after a background launch. Reading is safe to retry;
+    // action requests are never retried by this harness or by the bridge.
+    assert(['WINDOW_UNAVAILABLE', 'UI_UNAVAILABLE', 'APP_CHANGED'].includes(value.error.code), JSON.stringify(value));
+    return false;
+  }, 'background app launch', 20);
   await adb('emu', 'geo', 'fix', '-74.0060', '40.7128');
   const location = await tool('phone_location', { timeoutMs: 20000 });
   assert(Math.abs(location.latitude - 40.7128) < 0.01);
