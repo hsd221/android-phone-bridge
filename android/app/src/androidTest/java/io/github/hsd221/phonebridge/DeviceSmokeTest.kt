@@ -50,6 +50,19 @@ class DeviceSmokeTest {
     private fun denied(code: String, tool: String, args: JSONObject = JSONObject()) {
         val result = mcp(tool, args); assertFalse(result.toString(), result.getBoolean("ok")); assertEquals(code, result.getJSONObject("error").getString("code"))
     }
+    private suspend fun awaitConnection(description: String) {
+        val deadline = android.os.SystemClock.elapsedRealtime() + 60000
+        var last: JSONObject? = null
+        while (android.os.SystemClock.elapsedRealtime() < deadline) {
+            if (!BridgeService.connected) { delay(250); continue }
+            last = mcp("phone_status")
+            if (last.optBoolean("ok")) {
+                if (last.getJSONObject("data").optBoolean("connected")) return
+            } else assertTrue(last.toString(), last.getJSONObject("error").getString("code") in setOf("PHONE_OFFLINE", "CONNECTION_REPLACED", "TIMEOUT"))
+            delay(250)
+        }
+        fail("$description: $last; linkStatus=${BridgeService.linkStatus}")
+    }
     private fun app() = JSONObject().put("packageName", demo)
     private fun awaitUi(expectedText: String? = null): JSONObject {
         var last: JSONObject? = null
@@ -191,12 +204,11 @@ class DeviceSmokeTest {
                 shell("svc wifi ${if (wifiWasOn) "enable" else "disable"}")
                 shell("svc data ${if (dataWasOn) "enable" else "disable"}")
             }
-            repeat(120) { if (!BridgeService.connected) delay(250) }
-            assertTrue("Phone did not reconnect after network recovery", BridgeService.connected)
-            assertTrue(ok("phone_status").getBoolean("connected"))
+            awaitConnection("Phone did not reconnect after network recovery")
             instrumentation.runOnMainSync { BridgeService.start(context, "reconnect") }
-            delay(5000)
-            assertTrue(ok("phone_status").getBoolean("connected"))
+            repeat(60) { if (BridgeService.connected) delay(100) }
+            assertFalse("Reconnect did not close the previous session", BridgeService.connected)
+            awaitConnection("Phone did not reconnect after an explicit reconnect")
             ok("phone_open_app", app()); awaitUi()
             ok("phone_back", app())
             if (arguments.getString("shizuku") == "true") {
