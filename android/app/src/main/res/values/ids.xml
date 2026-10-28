@@ -1,0 +1,21 @@
+<resources>
+    <item type="id" name="app_permission_search" />
+    <item type="id" name="app_permission_list" />
+    <item type="id" name="app_permission_summary" />
+    <item type="id" name="select_filtered_apps" />
+    <item type="id" name="clear_selected_apps" />
+    <item type="id" name="batch_app_permissions" />
+    <item type="id" name="grant_everything" />
+    <item type="id" name="add_app_package" />
+    <item type="id" name="capabilities_enable_all" />
+    <item type="id" name="capabilities_disable_all" />
+    <item type="id" name="system_accessibility_status" />
+    <item type="id" name="system_location_status" />
+    <item type="id" name="system_background_location_status" />
+    <item type="id" name="system_location_service_status" />
+    <item type="id" name="system_notification_status" />
+    <item type="id" name="system_battery_status" />
+    <item type="id" name="system_background_status" />
+    <item type="id" name="system_autostart_status" />
+    <item type="id" name="system_shizuku_status" />
+</resources>

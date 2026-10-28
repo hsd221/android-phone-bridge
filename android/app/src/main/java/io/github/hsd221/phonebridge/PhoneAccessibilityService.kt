@@ -38,9 +38,14 @@ class PhoneAccessibilityService : AccessibilityService() {
     override fun onDestroy() { instance = null; invalidate(); super.onDestroy() }
     fun invalidate() { uiEpoch++; windowEpoch++; paths.clear(); snapshotEpoch = -1 }
 
-    private fun authorizePackage(name: String, operation: Boolean) {
-        if (name == packageName) throw ToolFailure("APP_DENIED", "手机工具桥设置仅允许用户在本机操作")
-        prefs.policy().requireApp(name, operation)
+    private fun authorizePackage(name: String, operation: Boolean, source: String? = null) {
+        try {
+            if (name == packageName) throw ToolFailure("APP_DENIED", "手机工具桥设置仅允许用户在本机操作")
+            prefs.policy().requireApp(name, operation)
+        } catch (failure: ToolFailure) {
+            if (source == null) throw failure
+            throw ToolFailure(failure.code, "${failure.message}（$source）", failure.outcomeUnknown)
+        }
     }
     /** No event-package filtering: inspect every interactive window and fail closed. */
     fun authorizedRoot(tool: String, expectedPackage: String? = null): AccessibilityNodeInfo {
@@ -51,13 +56,13 @@ class PhoneAccessibilityService : AccessibilityService() {
         val root = rootInActiveWindow ?: throw ToolFailure("UI_UNAVAILABLE", "当前应用未提供可读取的界面")
         val target = root.packageName?.toString() ?: throw ToolFailure("UI_UNAVAILABLE", "无法确认前台应用")
         if (expectedPackage != null && expectedPackage != target) throw ToolFailure("APP_CHANGED", "当前前台应用与请求不匹配")
-        authorizePackage(target, operation)
+        authorizePackage(target, operation, "活动窗口")
         val visible = windows.filter { it.displayId == Display.DEFAULT_DISPLAY && Rect().also(it::getBoundsInScreen).let { bounds -> !bounds.isEmpty } }
         if (visible.isEmpty()) throw ToolFailure("UI_UNAVAILABLE", "无法核对可见窗口")
         for (window in visible) {
-            val windowRoot = window.root ?: throw ToolFailure("WINDOW_UNAVAILABLE", "存在无法核对的窗口，已拒绝访问")
+            val windowRoot = window.root ?: throw ToolFailure("WINDOW_UNAVAILABLE", "活动应用 $target 存在无法核对的窗口，已拒绝访问（窗口类型 ${window.type}）")
             val owner = windowRoot.packageName?.toString() ?: throw ToolFailure("WINDOW_UNAVAILABLE", "无法确认窗口归属")
-            authorizePackage(owner, operation)
+            authorizePackage(owner, operation, "活动应用 $target，附加窗口类型 ${window.type}，active=${window.isActive}，focused=${window.isFocused}，visible=${windowRoot.isVisibleToUser}")
         }
         return root
     }
@@ -76,7 +81,7 @@ class PhoneAccessibilityService : AccessibilityService() {
             visited++
             if (!node.isVisibleToUser) continue
             val owner = node.packageName?.toString() ?: throw ToolFailure("UI_UNAVAILABLE", "控件归属不明")
-            authorizePackage(owner, false)
+            authorizePackage(owner, false, "活动应用 ${root.packageName}，控件归属")
             val bounds = Rect().also(node::getBoundsInScreen)
             val id = "$snapshot:${nodes.length()}"
             paths[id] = path

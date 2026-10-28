@@ -17,6 +17,8 @@ Bridge 测试直接启动本地 HTTP/WebSocket 服务，使用官方 MCP 客户�
 
 Android JVM 测试覆盖默认拒绝、读取/操作分权、两类暂停、状态例外、设备身份、请求去重、有效期和时钟异常。
 
+`test:android` 还会先运行三组 `PermissionManagementTest`：批量授权提交后的完整状态与暂停保留；应用搜索、跨筛选多选、页面重建和横竖屏切换、四种批量操作及一键全开范围；从系统设置返回后的定位/通知授权状态刷新与通知类别被关闭的识别。测试需由脚本显式传入 `permissionUiTest=true`，只接受专用模拟器，并拒绝替换已配对身份。随后清除测试应用状态，再进行原有 MCP 闭环。
+
 ## 可重复的 Android 模拟器闭环
 
 先构建主 APK、测试应用与 instrumentation APK，启动 Android 15 / API 35 默认 x86_64 模拟器：
@@ -40,6 +42,7 @@ npm run test:android:boot -- emulator-5554
 | Bridge 类型检查、构建和 MCP 集成测试 | Ubuntu 24.04.5 / Node 22.23.2 | 8 项通过 |
 | Android JVM 授权与请求测试 | JDK 17 / Gradle 8.11.1 | 3 组通过 |
 | Android Debug 构建及 lint | compile/target API 35 | 已通过，lint 无问题 |
+| 0.1.1 权限管理与系统状态 | API 35 专用模拟器 | 三组通过，覆盖搜索、多选、批量授权、全开范围、横竖屏和系统状态刷新 |
 | 主 APK、测试应用、instrumentation APK | 最低 API 30 | 已生成 |
 | Android 15 模拟器 MCP 完整闭环 | API 35 / 默认 x86_64 镜像 | 已通过，`OK (1 test)`，21.387 秒 |
 | 可选 Shizuku 增强及完整基础流程 | Shizuku 13.6.0 / 非 Root / UID 2000 | 已通过，`OK (1 test)`，24.436 秒 |
@@ -51,6 +54,8 @@ npm run test:android:boot -- emulator-5554
 | 真实手机切网、厂商省电、休眠和重启 | 当前无连接的真实手机 | 待设备测试 |
 
 已通过的完整 CI：[Demo checks #40538594832](https://github.com/hsd221/android-phone-bridge/actions/runs/40538594832)。Android SDK 安装显式指定 `platform-tools`、`platforms;android-35` 和 `build-tools;35.0.0`，避免安装已经下架的旧 `tools` 包。每次推送自动运行上述四个任务，并提供主 APK、测试应用 APK 和 lint 报告的私有构建产物。
+
+2026-10-28 的 0.1.1 权限管理修改已在本地通过 Debug/测试 APK 构建、三组 JVM 测试、lint（无问题）、三组权限模拟器检查及原有 MCP 模拟器闭环；横屏布局调整后再次通过权限模拟器检查。此次按用户要求暂停真机联调；更细的权限粒度仅记录于 [TODO.md](../TODO.md)。
 
 ## 人工验收步骤
 

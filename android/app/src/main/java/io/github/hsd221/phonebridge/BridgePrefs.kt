@@ -39,11 +39,24 @@ class BridgePrefs(context: Context) {
             apps.keys().asSequence().associateWith { val app = apps.getJSONObject(it); AppAccess(app.optBoolean("read"), app.optBoolean("operate")) })
     }
     fun setApp(packageName: String, access: AppAccess) {
-        val apps = JSONObject(preferences.getString("apps", "{}")!!)
-        apps.put(packageName, JSONObject().put("read", access.read).put("operate", access.operate))
-        preferences.edit().putString("apps", apps.toString()).commit()
+        setApps(mapOf(packageName to access))
     }
-    fun setFlag(key: String, value: Boolean) { preferences.edit().putBoolean(key, value).commit() }
+    fun setApps(updates: Map<String, AppAccess>) = setPermissions(updates)
+    fun setCapabilities(enabled: Boolean) = setPermissions(capabilities = if (enabled) Capability.entries.toSet() else emptySet())
+    /** One durable transaction, including when all applications and capabilities are enabled together. */
+    fun setPermissions(updates: Map<String, AppAccess> = emptyMap(), capabilities: Set<Capability>? = null) {
+        val editor = preferences.edit()
+        if (updates.isNotEmpty()) {
+            val apps = JSONObject(preferences.getString("apps", "{}")!!)
+            updates.forEach { (packageName, access) ->
+                apps.put(packageName, JSONObject().put("read", access.read).put("operate", access.operate))
+            }
+            editor.putString("apps", apps.toString())
+        }
+        capabilities?.let { enabled -> Capability.entries.forEach { editor.putBoolean("cap_${it.name}", it in enabled) } }
+        check(editor.commit()) { "无法保存权限，请重试" }
+    }
+    fun setFlag(key: String, value: Boolean) { check(preferences.edit().putBoolean(key, value).commit()) { "无法保存设置，请重试" } }
     private fun readIdentity(key: String): PhoneIdentity? {
         val encrypted = preferences.getString(key, null) ?: return null
         return try {
