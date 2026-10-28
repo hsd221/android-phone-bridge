@@ -38,6 +38,18 @@ async function tool(name: string, args: Record<string, unknown> = {}) {
   assert.equal(value.ok, true, JSON.stringify(value));
   return value.data;
 }
+// Android may switch its default network again just after boot. Only observations can
+// wait through a reconnect; launch/gesture/input requests still use tool() exactly once.
+async function readAfterReconnect(name: 'phone_status' | 'phone_location', args: Record<string, unknown> = {}) {
+  let result: Awaited<ReturnType<typeof response>>;
+  await until(async () => {
+    result = await response(name, args);
+    if (result.ok) return true;
+    assert(['PHONE_OFFLINE', 'CONNECTION_REPLACED', 'TIMEOUT'].includes(result.error.code), JSON.stringify(result));
+    return false;
+  }, `${name} response after reconnect`, 60);
+  return result.data;
+}
 try {
   const address = await bridge.listen();
   assert(address && typeof address !== 'string');
@@ -81,7 +93,7 @@ try {
     assert(['PHONE_OFFLINE', 'CONNECTION_REPLACED', 'TIMEOUT'].includes(value.error.code), JSON.stringify(value));
     return false;
   }, 'automatic MCP response after reboot', 90);
-  const status = await tool('phone_status');
+  const status = await readAfterReconnect('phone_status');
   assert.equal(status.connected, true);
   assert.equal(status.permissions.accessibility, true);
   assert.equal(status.permissions.locationForegroundService, true);
@@ -94,11 +106,11 @@ try {
     // The accessibility service can briefly expose a window without a root while Android
     // finishes switching activities after a background launch. Reading is safe to retry;
     // action requests are never retried by this harness or by the bridge.
-    assert(['WINDOW_UNAVAILABLE', 'UI_UNAVAILABLE', 'APP_CHANGED'].includes(value.error.code), JSON.stringify(value));
+    assert(['WINDOW_UNAVAILABLE', 'UI_UNAVAILABLE', 'APP_CHANGED', 'PHONE_OFFLINE', 'CONNECTION_REPLACED', 'TIMEOUT'].includes(value.error.code), JSON.stringify(value));
     return false;
   }, 'background app launch', 20);
   await adb('emu', 'geo', 'fix', '-74.0060', '40.7128');
-  const location = await tool('phone_location', { timeoutMs: 20000 });
+  const location = await readAfterReconnect('phone_location', { timeoutMs: 20000 });
   assert(Math.abs(location.latitude - 40.7128) < 0.01);
   console.log('PASS: boot restored connection, accessibility, location FGS, background app launch, UI read, and location through an external MCP harness.');
 } finally {
