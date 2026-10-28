@@ -59,6 +59,7 @@ class PermissionManagementTest {
     }
     private fun shell(command: String) = instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
         .executeShellCommand(command).use { android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes().toString(Charsets.UTF_8) }
+    private fun appCount(list: ListView) = list.adapter.count - list.headerViewsCount
     private fun chooseDialogItem(label: String) {
         eventually("Missing batch option: $label") {
             var node = instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES).rootInActiveWindow
@@ -107,7 +108,7 @@ class PermissionManagementTest {
                 assertFalse(context.packageManager.getActivityInfo(ComponentName(context, AppPermissionsActivity::class.java), 0).exported)
                 val search = activity.findViewById<EditText>(R.id.app_permission_search)
                 search.setText(alpha.uppercase())
-                assertEquals(1, activity.findViewById<ListView>(R.id.app_permission_list).adapter.count)
+                assertEquals(1, appCount(activity.findViewById(R.id.app_permission_list)))
                 activity.findViewById<Button>(R.id.select_filtered_apps).performClick()
                 search.setText(bravo)
                 activity.findViewById<Button>(R.id.select_filtered_apps).performClick()
@@ -128,11 +129,12 @@ class PermissionManagementTest {
             eventually("Landscape layout has no usable application list or lost its selection", { landscapeDetails }) {
                 var usable = false
                 scenario.onActivity {
+                    val list = it.findViewById<ListView>(R.id.app_permission_list)
                     landscapeDetails = "orientation=${it.resources.configuration.orientation}, screenHeightDp=${it.resources.configuration.screenHeightDp}, " +
-                        "listHeightDp=${it.findViewById<ListView>(R.id.app_permission_list).height / it.resources.displayMetrics.density}, " +
+                        "viewportHeightDp=${list.height / it.resources.displayMetrics.density}, applicationCount=${appCount(list)}, " +
                         "summary=${it.findViewById<TextView>(R.id.app_permission_summary).text}"
                     usable = it.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE &&
-                        it.findViewById<ListView>(R.id.app_permission_list).height >= 80 * it.resources.displayMetrics.density &&
+                        list.height >= 80 * it.resources.displayMetrics.density && appCount(list) == 0 &&
                         it.findViewById<TextView>(R.id.app_permission_summary).text.contains("已选 2 个")
                 }
                 usable
@@ -168,7 +170,7 @@ class PermissionManagementTest {
                 assertFalse(activity.findViewById<Button>(R.id.batch_app_permissions).isEnabled)
                 val search = activity.findViewById<EditText>(R.id.app_permission_search)
                 search.setText("")
-                catalogCount = activity.findViewById<ListView>(R.id.app_permission_list).adapter.count
+                catalogCount = appCount(activity.findViewById(R.id.app_permission_list))
                 search.setText(alpha)
                 activity.findViewById<Button>(R.id.select_filtered_apps).performClick()
                 // This button must operate on the whole catalog, even with only one result selected.
@@ -189,6 +191,7 @@ class PermissionManagementTest {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity {
                 assertTrue(it.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0)
+                it.findViewById<android.view.View>(R.id.nav_settings).performClick()
                 assertTrue(it.findViewById<TextView>(R.id.system_autostart_status).text.contains("需手动确认"))
             }
             scenario.moveToState(Lifecycle.State.CREATED)
@@ -200,9 +203,9 @@ class PermissionManagementTest {
             eventually("System grants were not refreshed after returning") {
                 var refreshed = false
                 scenario.onActivity {
-                    refreshed = it.findViewById<TextView>(R.id.system_location_status).text.toString() == "定位权限：已允许精确定位" &&
-                        it.findViewById<TextView>(R.id.system_background_location_status).text.toString() == "后台定位：已允许（始终允许）" &&
-                        it.findViewById<TextView>(R.id.system_notification_status).text.toString() == "运行通知：已允许"
+                    refreshed = it.findViewById<TextView>(R.id.system_location_status).text.toString() == "已允许精确定位" &&
+                        it.findViewById<TextView>(R.id.system_background_location_status).text.toString() == "已允许（始终允许）" &&
+                        it.findViewById<TextView>(R.id.system_notification_status).text.toString() == "已允许"
                 }
                 refreshed
             }

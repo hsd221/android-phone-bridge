@@ -18,4 +18,28 @@
     <item type="id" name="system_background_status" />
     <item type="id" name="system_autostart_status" />
     <item type="id" name="system_shizuku_status" />
+    <item type="id" name="nav_connection" />
+    <item type="id" name="nav_access" />
+    <item type="id" name="nav_settings" />
+    <item type="id" name="pair_address" />
+    <item type="id" name="pair_code" />
+    <item type="id" name="pair_submit" />
+    <item type="id" name="pair_error" />
+    <item type="id" name="pair_allow_http" />
+    <item type="id" name="pause_all" />
+    <item type="id" name="pause_operations" />
+    <item type="id" name="cap_location" />
+    <item type="id" name="cap_ui" />
+    <item type="id" name="cap_screenshot" />
+    <item type="id" name="cap_operate" />
+    <item type="id" name="connection_state" />
+    <item type="id" name="manage_app_permissions" />
+    <item type="id" name="access_state" />
+    <item type="id" name="shizuku_enabled" />
+    <item type="id" name="reconnect" />
+    <item type="id" name="unpair" />
+    <item type="id" name="manual_package" />
+    <item type="id" name="app_read" />
+    <item type="id" name="app_operate" />
+    <item type="id" name="app_permission_empty" />
 </resources>

@@ -1,0 +1,15 @@
+<resources>
+    <color name="bridge_background">#101218</color>
+    <color name="bridge_surface">#1C1F28</color>
+    <color name="bridge_accent">#B2C5FF</color>
+    <color name="bridge_ink">#F2F4FA</color>
+    <color name="bridge_secondary">#B5BDCF</color>
+    <bool name="bridge_light_bars">false</bool>
+    <color name="bridge_accent_surface">#293957</color>
+    <color name="bridge_on_accent">#142344</color>
+    <color name="bridge_success">#9AD9B2</color>
+    <color name="bridge_warning">#F3C18C</color>
+    <color name="bridge_danger">#FFB2BE</color>
+    <color name="bridge_stroke">#3D4352</color>
+    <color name="bridge_muted_surface">#252934</color>
+</resources>

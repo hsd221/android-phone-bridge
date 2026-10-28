@@ -1,13 +1,12 @@
 <resources>
     <string name="app_name">手机工具桥</string>
-    <string name="connection_status">%1$s\n无障碍：%2$s · 定位：%3$s\nShizuku：%4$s</string>
     <string name="accessibility_description">将你授权的应用界面和操作提供给已配对的 Bridge。可随时在手机工具桥中暂停全部访问、暂停操作或解除配对。默认不允许访问任何应用。</string>
-    <string name="app_permission_row">%1$s\n%2$s\n%3$s</string>
     <string name="app_permission_summary">显示 %1$d / 共 %2$d 个 · 已选 %3$d 个%4$s</string>
     <string name="app_permission_hidden">（筛选外 %1$d 个）</string>
     <string name="app_permission_bulk">批量设置（%1$d）</string>
-    <string name="app_permission_scope">一键开启：列表全部 %1$d 个应用（含筛选外）的读取/操作与四项能力。系统权限在主页授予；未列出或新装应用默认禁止，可添加包名。</string>
-    <string name="app_permission_scope_compact">覆盖列表全部 %1$d 个应用及四项能力；系统权限需单独授予。</string>
-    <string name="system_permission_state">%1$s：%2$s</string>
+    <string name="app_permission_scope">一键开启覆盖全部 %1$d 个应用（含筛选外）的读取、操作与四项能力。系统权限与暂停状态保持当前设置；未列出和新装应用默认禁止。</string>
+    <string name="app_permission_scope_compact">全开：全部 %1$d 个应用与四项能力；系统授权、暂停不变。</string>
     <string name="app_access_summary">已配置 %1$d 个应用 · 允许读取 %2$d 个 · 允许操作 %3$d 个</string>
+    <string name="capability_summary">已开放 %1$d / 4 项能力</string>
+    <string name="catalog_load_error">无法读取应用列表\n返回后可重新打开此页面。</string>
 </resources>

@@ -37,6 +37,10 @@ try {
     '-e', 'permissionUiTest', 'true', 'io.github.hsd221.phonebridge.test/androidx.test.runner.AndroidJUnitRunner');
   process.stdout.write(permissionUi);
   if (!permissionUi.includes('OK (3 tests)') || permissionUi.includes('FAILURES')) throw new Error('Permission management tests failed');
+  const frontendUi = await adb('shell', 'am', 'instrument', '-w', '-r', '-e', 'class', 'io.github.hsd221.phonebridge.FrontendInteractionTest',
+    '-e', 'permissionUiTest', 'true', 'io.github.hsd221.phonebridge.test/androidx.test.runner.AndroidJUnitRunner');
+  process.stdout.write(frontendUi);
+  if (!frontendUi.includes('OK (7 tests)') || frontendUi.includes('FAILURES')) throw new Error('Frontend interaction tests failed');
   // These tests change grants and notification channels; start the MCP smoke flow from clean app state.
   await adb('shell', 'pm', 'clear', 'io.github.hsd221.phonebridge');
   for (const permission of ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'ACCESS_BACKGROUND_LOCATION', 'POST_NOTIFICATIONS']) {

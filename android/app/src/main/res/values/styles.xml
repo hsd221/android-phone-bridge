@@ -1,10 +1,17 @@
 <resources>
-    <style name="Theme.PhoneBridge" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="Base.PhoneBridge" parent="android:style/Theme.Material.Light.NoActionBar" />
+    <style name="Theme.PhoneBridge" parent="Base.PhoneBridge">
         <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#17665B</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar">true</item>
-        <item name="android:statusBarColor">#F3F6F3</item>
-        <item name="android:navigationBarColor">#F3F6F3</item>
+        <item name="android:colorAccent">@color/bridge_accent</item>
+        <item name="android:windowBackground">@color/bridge_background</item>
+        <item name="android:colorBackground">@color/bridge_surface</item>
+        <item name="android:textColorPrimary">@color/bridge_ink</item>
+        <item name="android:textColorSecondary">@color/bridge_secondary</item>
+        <item name="android:windowLightStatusBar">@bool/bridge_light_bars</item>
+
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowLightNavigationBar">@bool/bridge_light_bars</item>
     </style>
 </resources>

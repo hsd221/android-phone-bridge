@@ -3,6 +3,13 @@ package io.github.hsd221.phonebridge
 import android.Manifest
 import android.app.UiAutomation
 import android.content.Intent
+import android.widget.Button
+import android.widget.EditText
+import android.widget.Switch
+import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
+import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.Dispatchers
@@ -64,6 +71,9 @@ class DeviceSmokeTest {
         fail("$description: $last; linkStatus=${BridgeService.linkStatus}")
     }
     private fun app() = JSONObject().put("packageName", demo)
+    private fun containsUiText(view: View, value: String): Boolean =
+        (view is TextView && view.text.contains(value)) ||
+            (view is ViewGroup && (0 until view.childCount).any { containsUiText(view.getChildAt(it), value) })
     private fun awaitUi(expectedText: String? = null): JSONObject {
         var last: JSONObject? = null
         repeat(30) {
@@ -101,6 +111,18 @@ class DeviceSmokeTest {
     }
     private fun shell(command: String): String = instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES).executeShellCommand(command)
         .use { android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes().toString(Charsets.UTF_8) }
+    private suspend fun chooseDialogAction(label: String) {
+        repeat(40) {
+            var target = instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES).rootInActiveWindow
+                ?.findAccessibilityNodeInfosByText(label)?.firstOrNull { it.text?.toString() == label }
+            while (target != null && !target.isClickable) target = target.parent
+            if (target?.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK) == true) {
+                instrumentation.waitForIdleSync(); return
+            }
+            delay(100)
+        }
+        fail("Dialog action was unavailable: $label")
+    }
     private suspend fun authorizeShizuku() {
         val support = ShizukuSupport(context)
         assertTrue("Start non-root Shizuku before the enhanced smoke test", support.status().optBoolean("running"))
@@ -124,10 +146,19 @@ class DeviceSmokeTest {
     @Test fun endToEnd() = runBlocking {
         assertNull("Smoke test refuses to replace an existing phone identity", prefs.identity)
         try {
-            val identity = BridgeNetwork.pair(base, arguments.getString("pairCode")!!, prefs, true)
-            prefs.identity = identity
-            instrumentation.runOnMainSync {
-                context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    activity.findViewById<EditText>(R.id.pair_address).setText(base)
+                    activity.findViewById<EditText>(R.id.pair_code).setText(arguments.getString("pairCode")!!)
+                    activity.findViewById<Switch>(R.id.pair_allow_http).performClick()
+                    activity.findViewById<Button>(R.id.pair_submit).performClick()
+                }
+                scenario.recreate()
+                repeat(150) { if (prefs.identity == null) delay(100) }
+                assertNotNull("Pairing through the connection page did not save an identity", prefs.identity)
+                scenario.onActivity { activity ->
+                    assertTrue("The real HTTP connection is missing its plaintext notice", containsUiText(activity.window.decorView, "此连接使用 HTTP 明文"))
+                }
             }
             instrumentation.waitForIdleSync()
             // Instrumentation restarts the target process; rebind the test service after that restart.
@@ -220,9 +251,17 @@ class DeviceSmokeTest {
                 awaitUi()
                 prefs.shizukuEnabled = false
             }
-            assertTrue(BridgeNetwork.revoke(identity))
-            prefs.identity = null
-            delay(200)
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { it.findViewById<Button>(R.id.unpair).performClick() }
+                chooseDialogAction("取消")
+                assertNotNull("Cancelling unpair changed the connection identity", prefs.identity)
+                scenario.onActivity { it.findViewById<Button>(R.id.unpair).performClick() }
+                chooseDialogAction("解除配对")
+                assertNull("Unpair did not stop local access immediately", prefs.identity)
+                assertTrue("Unpair did not pause access", prefs.policy().pausedAll)
+                repeat(150) { if (prefs.pendingRevocation != null) delay(100) }
+                assertNull("Bridge did not acknowledge revocation", prefs.pendingRevocation)
+            }
         } finally {
             prefs.identity?.let { BridgeNetwork.revoke(it) }
             prefs.identity = null

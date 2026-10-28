@@ -31,7 +31,7 @@ class BridgePrefs(context: Context) {
         set(value) { saveIdentity("pendingRevocation", value) }
     var shizukuEnabled: Boolean
         get() = preferences.getBoolean("shizukuEnabled", false)
-        set(value) { preferences.edit().putBoolean("shizukuEnabled", value).apply() }
+        set(value) { setFlag("shizukuEnabled", value) }
     fun policy(): AccessPolicy {
         val apps = JSONObject(preferences.getString("apps", "{}")!!)
         return AccessPolicy(preferences.getBoolean("pausedAll", false), preferences.getBoolean("pausedOperations", false),

@@ -42,6 +42,7 @@ Anthropic 的 Computer Use 让我们看到了大模型直接与操作系统图�
   - 操作：启动应用 (`phone_open_app`)、模拟点击 (`phone_tap`)、手势滑动 (`phone_swipe`)、文本输入 (`phone_input`)、系统返回 (`phone_back`)
 - **细粒度权限控制**：
   - 默认全部拒绝，支持针对每个应用分别配置“读取”与“操作”权限；
+  - “连接 / 访问 / 设置”三页导航，支持系统深色模式、大字体和即时状态刷新；
   - 提供应用搜索、批量多选授权与一键全开配置；
   - 手机端通知栏支持快捷“暂停操作”或“暂停全部访问”。
 - **可靠的通信与异常处理**：
@@ -60,6 +61,8 @@ Anthropic 的 Computer Use 让我们看到了大模型直接与操作系统图�
   Bridge 服务构建与启动、一次性配对码生成、手机端 APK 编译与安装、Agent Harness 接入（Streamable HTTP 与 stdio 模式）及生产反向代理配置。
 - 📐 **[技术实现与架构设计 (docs/IMPLEMENTATION.md)](docs/IMPLEMENTATION.md)**  
   模块职责划分、主动出站中继架构、无障碍截图实现机制、双重凭证隔离与安全边界考量。
+- **[Android 界面与组件 (docs/ANDROID-UI.md)](docs/ANDROID-UI.md)**
+  页面分工、权限范围、原生可复用组件及交互约定。
 - 🔌 **[通信协议规范 (docs/PROTOCOL.md)](docs/PROTOCOL.md)**  
   Bridge 与手机端的 WebSocket 握手协议、消息格式契约、屏幕物理坐标换算公式与 21 个标准错误码速查。
 - 🧪 **[测试与设备验收记录 (docs/TESTING.md)](docs/TESTING.md)**  
