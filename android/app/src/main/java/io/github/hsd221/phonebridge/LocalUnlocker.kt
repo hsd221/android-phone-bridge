@@ -348,17 +348,35 @@ class LocalUnlocker internal constructor(
     }
 
     private suspend fun enterPin(accessibility: PhoneAccessibilityService, value: String, submission: PinSubmission, ensure: () -> Unit) {
+        var entered = false
         enterPinOnce(value, submission, ensure,
             isUnlocked = { !keyguard.isKeyguardLocked && !keyguard.isDeviceLocked },
             clickDigit = { digit ->
                 val root = currentRoot(accessibility, ensure)
                 if (entry(root, UnlockKind.PIN)?.isPassword != true) unsupported(UnlockDiagnostics.Reason.ENTRY_NOT_PROTECTED)
+                if (submission == PinSubmission.AUTO_CONFIRM) {
+                    if (!entered) {
+                        // Recheck emptiness at the first action, after the latch
+                        // was saved. Do not append to a user's intervening input.
+                        if (preflight(root, UnlockCredential(UnlockKind.PIN, value)) != PinSubmission.AUTO_CONFIRM) {
+                            throw ToolFailure("UNLOCK_INTERRUPTED", "系统锁屏状态已改变，已停止本地输入")
+                        }
+                    } else {
+                        val owner = root.packageName?.toString() ?: unsupported()
+                        val backVisible = root.findAccessibilityNodeInfosByViewId("$owner:id/back_button").any { it.isVisibleToUser }
+                        val deleteActionable = node(root, "delete_button")?.isClickable == true
+                        if (!PinAutoConfirmPolicy.canContinue(backVisible, deleteActionable)) {
+                            throw ToolFailure("UNLOCK_INTERRUPTED", "系统锁屏状态已改变，已停止本地输入")
+                        }
+                    }
+                }
                 val key = node(root, "key$digit") ?: unsupported(UnlockDiagnostics.Reason.DIGIT_CONTROL_UNAVAILABLE)
                 if (!key.isClickable || (submission == PinSubmission.AUTO_CONFIRM && key.contentDescription?.toString() != digit.toString())) {
                     unsupported(UnlockDiagnostics.Reason.DIGIT_CONTROL_UNAVAILABLE)
                 }
                 ensure()
                 if (!key.performAction(AccessibilityNodeInfo.ACTION_CLICK)) throw ToolFailure("UNLOCK_INTERRUPTED", "系统拒绝本地 PIN 输入")
+                entered = true
             },
             confirm = {
                 val root = currentRoot(accessibility, ensure)

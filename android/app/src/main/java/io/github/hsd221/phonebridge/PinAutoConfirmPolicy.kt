@@ -14,4 +14,9 @@ internal object PinAutoConfirmPolicy {
             keys.any { !it.actionable || it.label != it.digit.toString() }) return PinAutoConfirmCheck.KEYPAD_UNVERIFIED
         return PinAutoConfirmCheck.SUPPORTED
     }
+
+    // A reset after automatic verification must end this sequence. In the
+    // reviewed layout, only Delete with Back absent proves input is ongoing.
+    fun canContinue(backButtonVisible: Boolean, deleteButtonActionable: Boolean): Boolean =
+        !backButtonVisible && deleteButtonActionable
 }

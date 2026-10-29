@@ -61,4 +61,11 @@ class PinAutoConfirmPolicyTest {
         val duplicated = verifiedKeys.map { it.copy(label = "0") }
         assertEquals(PinAutoConfirmCheck.KEYPAD_UNVERIFIED, check(duplicated))
     }
+
+    @Test fun continuedInputRequiresDeleteActionableAndBackAbsent() {
+        assertEquals(true, PinAutoConfirmPolicy.canContinue(backButtonVisible = false, deleteButtonActionable = true))
+        assertEquals(false, PinAutoConfirmPolicy.canContinue(backButtonVisible = false, deleteButtonActionable = false))
+        assertEquals(false, PinAutoConfirmPolicy.canContinue(backButtonVisible = true, deleteButtonActionable = false))
+        assertEquals(false, PinAutoConfirmPolicy.canContinue(backButtonVisible = true, deleteButtonActionable = true))
+    }
 }

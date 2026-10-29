@@ -24,6 +24,82 @@ class LocalPinSequenceTest {
         }
     }
 
+    /** Synthetic public-profile adapter; it cannot replace Android system/window validation. */
+    private class ReviewedProfile {
+        val digits = mutableListOf<Char>()
+        var backVisible = true
+        var deleteActionable = false
+        var afterClick: () -> Unit = {}
+
+        fun click(digit: Char) {
+            val accepted = if (digits.isEmpty()) {
+                val keys = ('0'..'9').map { PinDigitKey(it, it.toString(), actionable = true) }
+                PinAutoConfirmPolicy.check(keys, backButtonActionable = backVisible, deleteButtonVisible = deleteActionable) == PinAutoConfirmCheck.SUPPORTED
+            } else PinAutoConfirmPolicy.canContinue(backButtonVisible = backVisible, deleteButtonActionable = deleteActionable)
+            check(accepted) { "synthetic profile refusal" }
+            digits.add(digit)
+            backVisible = false
+            deleteActionable = true
+            afterClick()
+        }
+    }
+
+    @Test fun reviewedProfileWithContinuousInputCompletesOnlyOneSequence() = runBlocking(ImmediateClock()) {
+        val profile = ReviewedProfile()
+        var confirmations = 0
+        enterPinOnce("120934", PinSubmission.AUTO_CONFIRM, {}, { false }, profile::click, { confirmations++ })
+        assertEquals(listOf('1', '2', '0', '9', '3', '4'), profile.digits)
+        assertEquals(0, confirmations)
+    }
+
+    @Test fun automaticFailureAndResetAtAShorterPrefixStopsTheRemainingConfiguredDigits() {
+        val profile = ReviewedProfile().apply {
+            afterClick = {
+                if (digits.size == 4) { backVisible = true; deleteActionable = false }
+            }
+        }
+        var confirmations = 0
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking(ImmediateClock()) {
+                enterPinOnce("120934", PinSubmission.AUTO_CONFIRM, {}, { false }, profile::click, { confirmations++ })
+            }
+        }
+        assertEquals(listOf('1', '2', '0', '9'), profile.digits)
+        assertEquals(0, confirmations)
+    }
+
+    @Test fun missingDeleteOrConflictingStateAfterPartialInputStopsImmediately() {
+        for ((back, delete) in listOf(false to false, true to true)) {
+            val profile = ReviewedProfile().apply {
+                afterClick = {
+                    if (digits.size == 2) { backVisible = back; deleteActionable = delete }
+                }
+            }
+            var confirmations = 0
+            assertThrows(IllegalStateException::class.java) {
+                runBlocking(ImmediateClock()) {
+                    enterPinOnce("120934", PinSubmission.AUTO_CONFIRM, {}, { false }, profile::click, { confirmations++ })
+                }
+            }
+            assertEquals(listOf('1', '2'), profile.digits)
+            assertEquals(0, confirmations)
+        }
+    }
+
+    @Test fun changedEmptyStateBeforeTheFirstClickRefusesWithoutInput() {
+        for ((back, delete) in listOf(false to false, true to true, false to true)) {
+            val profile = ReviewedProfile().apply { backVisible = back; deleteActionable = delete }
+            var confirmations = 0
+            assertThrows(IllegalStateException::class.java) {
+                runBlocking(ImmediateClock()) {
+                    enterPinOnce("120934", PinSubmission.AUTO_CONFIRM, {}, { false }, profile::click, { confirmations++ })
+                }
+            }
+            assertEquals(emptyList<Char>(), profile.digits)
+            assertEquals(0, confirmations)
+        }
+    }
+
     @Test fun autoConfirmEntersOneSequenceAndNeverDispatchesConfirmation() = runBlocking(ImmediateClock()) {
         val digits = mutableListOf<Char>()
         var confirmations = 0
