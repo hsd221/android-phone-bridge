@@ -200,10 +200,11 @@ class UnlockTest {
 
     private fun assertLastAttempt(mode: String, outcome: String, credentialAttempted: Boolean) {
         val value = ok("phone_status").getJSONObject("unlock").getJSONObject("lastAttempt")
-        assertEquals(setOf("stage", "outcome", "systemDismiss", "revealAttempted", "credentialAttempted"), value.keys().asSequence().toSet())
+        assertEquals(setOf("stage", "outcome", "systemDismiss", "revealAttempted", "credentialAttempted", "reason"), value.keys().asSequence().toSet())
         assertTrue("Unexpected free-form diagnostic stage", value.getString("stage") in setOf("checking", "waking", "waiting_for_bouncer", "waiting_for_keyguard", "revealing", "preflight", "entering_credential", "verifying"))
         assertEquals(mode, value.getString("systemDismiss"))
         assertEquals(outcome, value.getString("outcome"))
+        assertTrue("Unexpected free-form diagnostic reason", value.getString("reason") in UnlockDiagnostics.Reason.entries.map { it.name.lowercase() })
         assertEquals(credentialAttempted, value.getBoolean("credentialAttempted"))
         assertTrue(value.get("revealAttempted") is Boolean)
         assertFalse("Fixed diagnostics exposed a synthetic local credential", secrets.any { value.toString().contains(it) })

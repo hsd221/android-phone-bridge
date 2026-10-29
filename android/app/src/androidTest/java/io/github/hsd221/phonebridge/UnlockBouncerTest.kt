@@ -143,14 +143,16 @@ class UnlockBouncerTest {
         return failure
     }
 
-    private fun assertDiagnostics(mode: String, outcome: String, credentialAttempted: Boolean, revealAttempted: Boolean? = null) {
+    private fun assertDiagnostics(mode: String, outcome: String, credentialAttempted: Boolean, revealAttempted: Boolean? = null, reason: UnlockDiagnostics.Reason = UnlockDiagnostics.Reason.NONE) {
         val value = UnlockDiagnostics.snapshot()
         assertNotNull("No in-memory unlock diagnostics were recorded", value)
         value!!
-        assertEquals(setOf("stage", "outcome", "systemDismiss", "revealAttempted", "credentialAttempted"), value.keys().asSequence().toSet())
+        assertEquals(setOf("stage", "outcome", "systemDismiss", "revealAttempted", "credentialAttempted", "reason"), value.keys().asSequence().toSet())
         assertTrue("Unexpected free-form diagnostic stage", value.getString("stage") in setOf("checking", "waking", "waiting_for_bouncer", "waiting_for_keyguard", "revealing", "preflight", "entering_credential", "verifying"))
         assertEquals(mode, value.getString("systemDismiss"))
         assertEquals(outcome, value.getString("outcome"))
+        assertTrue("Unexpected free-form diagnostic reason", value.getString("reason") in UnlockDiagnostics.Reason.entries.map { it.name.lowercase() })
+        assertEquals(reason.name.lowercase(), value.getString("reason"))
         assertEquals(credentialAttempted, value.getBoolean("credentialAttempted"))
         if (revealAttempted != null) assertEquals(revealAttempted, value.getBoolean("revealAttempted"))
         activeCredential?.let { assertFalse("Diagnostics exposed a synthetic credential", value.toString().contains(it.value)) }
@@ -279,7 +281,7 @@ class UnlockBouncerTest {
                 assertEquals("Existing-input check did not reach a known bouncer once", 1, seeded)
                 withContext(Dispatchers.Main) {
                     assertTrue("Automatic unlock changed the existing partial input", visibleEntries().any { it.isPassword && it.text?.length == 1 })
-                    assertDiagnostics("wake_only", "USER_UNLOCK_REQUIRED", credentialAttempted = false)
+                    assertDiagnostics("wake_only", "USER_UNLOCK_REQUIRED", credentialAttempted = false, reason = UnlockDiagnostics.Reason.ENTRY_NOT_EMPTY)
                     assertEquals("preflight", UnlockDiagnostics.snapshot()!!.getString("stage"))
                 }
                 // The partial value now exists BEFORE another request. Opening a
@@ -297,7 +299,7 @@ class UnlockBouncerTest {
                 assertEquals("An existing partial input triggered a reveal swipe", 0, swipesForExistingInput)
                 withContext(Dispatchers.Main) {
                     assertTrue("Direct preflight changed the pre-existing partial input", visibleEntries().any { it.isPassword && it.text?.length == 1 })
-                    assertDiagnostics("not_requested", "USER_UNLOCK_REQUIRED", credentialAttempted = false, revealAttempted = false)
+                    assertDiagnostics("not_requested", "USER_UNLOCK_REQUIRED", credentialAttempted = false, revealAttempted = false, reason = UnlockDiagnostics.Reason.ENTRY_NOT_EMPTY)
                     assertEquals("preflight", UnlockDiagnostics.snapshot()!!.getString("stage"))
                 }
                 if (credential.kind == UnlockKind.PIN) {
@@ -320,7 +322,7 @@ class UnlockBouncerTest {
                             localUnlock { if (it == RevealPhase.WAKE_READY) unexpectedHelpers++ }
                         }
                         assertEquals("An obstructed existing keypad opened a helper", 0, unexpectedHelpers)
-                        assertDiagnostics("not_requested", "UNLOCK_UNSUPPORTED", credentialAttempted = false, revealAttempted = false)
+                        assertDiagnostics("not_requested", "UNLOCK_UNSUPPORTED", credentialAttempted = false, revealAttempted = false, reason = UnlockDiagnostics.Reason.UNRECOGNIZED)
                     } finally { shell("settings put secure enabled_accessibility_services $accessibilityComponent") }
                     eventually("Existing-input obstruction did not disappear") {
                         // A disconnect can leave an anonymous overlay window briefly;

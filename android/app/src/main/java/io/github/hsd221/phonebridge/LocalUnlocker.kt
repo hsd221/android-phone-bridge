@@ -88,13 +88,13 @@ class LocalUnlocker internal constructor(
                 root = awaitBouncer(accessibility, opened, credential.kind, ::checkAccess) ?: return success("system")
             }
             UnlockDiagnostics.stage(UnlockDiagnostics.Stage.PREFLIGHT)
-            preflight(root, credential)
+            val pinSubmission = preflight(root, credential)
             checkAccess()
             store.beginAttempt()
             attempted = true
             UnlockDiagnostics.enteringCredential()
             when (credential.kind) {
-                UnlockKind.PIN -> enterPin(accessibility, credential.value, ::checkAccess)
+                UnlockKind.PIN -> enterPin(accessibility, credential.value, checkNotNull(pinSubmission), ::checkAccess)
                 UnlockKind.PASSWORD -> enterPassword(accessibility, credential.value, ::checkAccess)
                 UnlockKind.PATTERN -> enterPattern(accessibility, credential.value, ::checkAccess)
             }
@@ -283,58 +283,90 @@ class LocalUnlocker internal constructor(
         return bounds
     }
 
-    private fun preflight(root: AccessibilityNodeInfo, credential: UnlockCredential) {
+    private fun preflight(root: AccessibilityNodeInfo, credential: UnlockCredential): PinSubmission? {
         val containerId = when (credential.kind) {
             UnlockKind.PIN -> "keyguard_pin_view"
             UnlockKind.PASSWORD -> "keyguard_password_view"
             UnlockKind.PATTERN -> "keyguard_pattern_view"
         }
-        if (node(root, containerId) == null) unsupported()
-        val field = entry(root, credential.kind) ?: unsupported()
+        if (node(root, containerId) == null) unsupported(UnlockDiagnostics.Reason.CONTAINER_UNAVAILABLE)
+        val field = entry(root, credential.kind) ?: unsupported(UnlockDiagnostics.Reason.ENTRY_UNAVAILABLE)
         when (credential.kind) {
             UnlockKind.PIN -> {
-                if (!field.isPassword) unsupported()
-                if (!field.text.isNullOrEmpty()) throw ToolFailure("USER_UNLOCK_REQUIRED", "锁屏输入框已有内容，请先在手机上处理")
-                if (credential.value.any { node(root, "key$it")?.isClickable != true } || node(root, "key_enter")?.isClickable != true) unsupported()
+                if (!field.isPassword) unsupported(UnlockDiagnostics.Reason.ENTRY_NOT_PROTECTED)
+                if (!field.text.isNullOrEmpty()) existingInput()
+                if (credential.value.any { node(root, "key$it")?.isClickable != true }) unsupported(UnlockDiagnostics.Reason.DIGIT_CONTROL_UNAVAILABLE)
+                if (node(root, "key_enter")?.isClickable == true) return PinSubmission.EXPLICIT_ENTER
+                val owner = root.packageName?.toString() ?: unsupported()
+                // Do not reinterpret a disabled/ambiguous confirmation control as
+                // auto-confirm. The supported MIUI profile has no Enter control.
+                if (root.findAccessibilityNodeInfosByViewId("$owner:id/key_enter").isNotEmpty()) {
+                    unsupported(UnlockDiagnostics.Reason.CONFIRM_CONTROL_UNAVAILABLE)
+                }
+                val keys = ('0'..'9').map { digit ->
+                    val key = node(root, "key$digit")
+                    PinDigitKey(digit, key?.contentDescription?.toString(), key?.isClickable == true)
+                }
+                val back = node(root, "back_button")
+                val deleteVisible = root.findAccessibilityNodeInfosByViewId("$owner:id/delete_button").any { it.isVisibleToUser }
+                when (PinAutoConfirmPolicy.check(keys, back?.isClickable == true, deleteVisible)) {
+                    PinAutoConfirmCheck.SUPPORTED -> return PinSubmission.AUTO_CONFIRM
+                    PinAutoConfirmCheck.INPUT_PRESENT -> existingInput()
+                    PinAutoConfirmCheck.EMPTY_STATE_UNKNOWN -> {
+                        UnlockDiagnostics.refused(UnlockDiagnostics.Reason.ENTRY_EMPTY_STATE_UNKNOWN)
+                        throw ToolFailure("USER_UNLOCK_REQUIRED", "无法确认 PIN 输入框为空，请在手机上处理")
+                    }
+                    PinAutoConfirmCheck.KEYPAD_UNVERIFIED -> unsupported(UnlockDiagnostics.Reason.AUTO_CONFIRM_UNVERIFIED)
+                }
             }
             UnlockKind.PASSWORD -> {
-                if (!field.isPassword || !field.isEditable) unsupported()
-                if (!field.text.isNullOrEmpty()) throw ToolFailure("USER_UNLOCK_REQUIRED", "锁屏输入框已有内容，请先在手机上处理")
+                if (!field.isPassword) unsupported(UnlockDiagnostics.Reason.ENTRY_NOT_PROTECTED)
+                if (!field.isEditable) unsupported(UnlockDiagnostics.Reason.ENTRY_NOT_EDITABLE)
+                if (!field.text.isNullOrEmpty()) existingInput()
                 if (field.actionList.none { it.id == AccessibilityNodeInfo.ACTION_SET_TEXT } ||
-                    field.actionList.none { it.id == AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id }) unsupported()
+                    field.actionList.none { it.id == AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id }) unsupported(UnlockDiagnostics.Reason.PASSWORD_ACTION_UNAVAILABLE)
             }
             UnlockKind.PATTERN -> {
                 val bounds = Rect().also(field::getBoundsInScreen)
-                if (bounds.width() < 90 || bounds.height() < 90) unsupported()
+                if (bounds.width() < 90 || bounds.height() < 90) unsupported(UnlockDiagnostics.Reason.PATTERN_BOUNDS_INVALID)
             }
         }
+        return null
     }
-    private fun unsupported(): Nothing = throw ToolFailure("UNLOCK_UNSUPPORTED", "此系统锁屏暂不支持本地自动输入，请在手机上手动解锁")
+    private fun existingInput(): Nothing {
+        UnlockDiagnostics.refused(UnlockDiagnostics.Reason.ENTRY_NOT_EMPTY)
+        throw ToolFailure("USER_UNLOCK_REQUIRED", "锁屏输入框已有内容，请先在手机上处理")
+    }
+    private fun unsupported(reason: UnlockDiagnostics.Reason = UnlockDiagnostics.Reason.UNRECOGNIZED): Nothing {
+        UnlockDiagnostics.refused(reason)
+        throw ToolFailure("UNLOCK_UNSUPPORTED", "此系统锁屏暂不支持本地自动输入，请在手机上手动解锁")
+    }
 
     private fun currentRoot(accessibility: PhoneAccessibilityService, ensure: () -> Unit, allowInputMethod: Boolean = false): AccessibilityNodeInfo {
         ensure()
         return systemRoot(accessibility, allowInputMethod) ?: throw ToolFailure("UNLOCK_INTERRUPTED", "系统锁屏状态已改变，已停止本地输入")
     }
 
-    private suspend fun enterPin(accessibility: PhoneAccessibilityService, value: String, ensure: () -> Unit) {
-        for (digit in value) {
-            ensure()
-            if (!keyguard.isKeyguardLocked && !keyguard.isDeviceLocked) return
-            val root = currentRoot(accessibility, ensure)
-            if (entry(root, UnlockKind.PIN) == null) unsupported()
-            val key = node(root, "key$digit") ?: unsupported()
-            ensure()
-            if (!key.performAction(AccessibilityNodeInfo.ACTION_CLICK)) throw ToolFailure("UNLOCK_INTERRUPTED", "系统拒绝本地 PIN 输入")
-            delay(100)
-        }
-        // Some systems auto-confirm a PIN. Never send Enter into the newly unlocked app.
-        delay(250)
-        ensure()
-        if (!keyguard.isKeyguardLocked) return
-        val root = currentRoot(accessibility, ensure)
-        if (entry(root, UnlockKind.PIN) == null) unsupported()
-        ensure()
-        if (node(root, "key_enter")?.performAction(AccessibilityNodeInfo.ACTION_CLICK) != true) throw ToolFailure("UNLOCK_INTERRUPTED", "系统拒绝本地 PIN 确认")
+    private suspend fun enterPin(accessibility: PhoneAccessibilityService, value: String, submission: PinSubmission, ensure: () -> Unit) {
+        enterPinOnce(value, submission, ensure,
+            isUnlocked = { !keyguard.isKeyguardLocked && !keyguard.isDeviceLocked },
+            clickDigit = { digit ->
+                val root = currentRoot(accessibility, ensure)
+                if (entry(root, UnlockKind.PIN)?.isPassword != true) unsupported(UnlockDiagnostics.Reason.ENTRY_NOT_PROTECTED)
+                val key = node(root, "key$digit") ?: unsupported(UnlockDiagnostics.Reason.DIGIT_CONTROL_UNAVAILABLE)
+                if (!key.isClickable || (submission == PinSubmission.AUTO_CONFIRM && key.contentDescription?.toString() != digit.toString())) {
+                    unsupported(UnlockDiagnostics.Reason.DIGIT_CONTROL_UNAVAILABLE)
+                }
+                ensure()
+                if (!key.performAction(AccessibilityNodeInfo.ACTION_CLICK)) throw ToolFailure("UNLOCK_INTERRUPTED", "系统拒绝本地 PIN 输入")
+            },
+            confirm = {
+                val root = currentRoot(accessibility, ensure)
+                if (entry(root, UnlockKind.PIN) == null) unsupported(UnlockDiagnostics.Reason.ENTRY_UNAVAILABLE)
+                ensure()
+                if (node(root, "key_enter")?.performAction(AccessibilityNodeInfo.ACTION_CLICK) != true) throw ToolFailure("UNLOCK_INTERRUPTED", "系统拒绝本地 PIN 确认")
+            },
+        )
     }
 
     private fun enterPassword(accessibility: PhoneAccessibilityService, value: String, ensure: () -> Unit) {

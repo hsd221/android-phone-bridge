@@ -140,7 +140,7 @@ Bridge 将来自 MCP 的工具调用封装为 JSON 请求包发送给手机端�
 - `phone_input`：向当前聚焦的文本框输入字符。
 - `phone_back`：触发系统物理返回键。
 
-`unlock.lastAttempt` 为 `null` 或包含以下固定状态的对象：`stage`（`checking`、`waking`、`waiting_for_bouncer`、`waiting_for_keyguard`、`revealing`、`preflight`、`entering_credential`、`verifying`）、`outcome`（`RUNNING`、`SUCCESS` 或解锁/权限/取消错误码）、`systemDismiss`（`not_requested`、`wake_only`、`system`）、`revealAttempted` 与 `credentialAttempted`。它只存在手机进程内存中，关闭解锁授权或解除配对时清空；不包含错误正文与凭据。
+`unlock.lastAttempt` 为 `null` 或包含以下六个固定状态字段的对象：`stage`（`checking`、`waking`、`waiting_for_bouncer`、`waiting_for_keyguard`、`revealing`、`preflight`、`entering_credential`、`verifying`）、`outcome`（`RUNNING`、`SUCCESS` 或解锁/权限/取消错误码）、`systemDismiss`（`not_requested`、`wake_only`、`system`）、`revealAttempted`、`credentialAttempted` 与 `reason`。`reason` 为 `none`、`unrecognized`、`container_unavailable`、`entry_unavailable`、`entry_not_protected`、`entry_not_editable`、`entry_not_empty`、`entry_empty_state_unknown`、`digit_control_unavailable`、`confirm_control_unavailable`、`auto_confirm_unverified`、`password_action_unavailable` 或 `pattern_bounds_invalid`。它只存在手机进程内存中，关闭解锁授权或解除配对时清空；不包含错误正文、节点内容、输入长度与凭据。
 
 > **坐标换算说明**：  
 > 触摸与手势操作均基于手机主屏幕的物理像素坐标。调用 `phone_screenshot` 时，为了节省带宽，返回的截图可能经过等比缩放。MCP 会在返回图像的同时附带 `displayWidth`、`displayHeight` 以及图片的实际 `width`、`height`。  
