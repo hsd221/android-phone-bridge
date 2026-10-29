@@ -15,16 +15,16 @@ import java.util.UUID
 /** Short-lived system-dismiss window. No credential is ever passed in an Intent. */
 class UnlockActivity : Activity() {
     companion object {
-        private class Request(val ensure: () -> Unit) {
+        private class Request(val ensure: () -> Unit, val requestSystemDismiss: Boolean) {
             val id = UUID.randomUUID().toString()
             val ready = CompletableDeferred<UnlockActivity>()
             var activity: UnlockActivity? = null
         }
         private var pending: Request? = null
         internal var dismissStatus = "idle"; private set
-        suspend fun open(accessibility: PhoneAccessibilityService, ensure: () -> Unit): UnlockActivity {
+        internal suspend fun open(accessibility: PhoneAccessibilityService, ensure: () -> Unit, requestSystemDismiss: Boolean = true): UnlockActivity {
             check(pending == null)
-            val request = Request(ensure)
+            val request = Request(ensure, requestSystemDismiss)
             dismissStatus = "opening"
             pending = request
             try {
@@ -42,6 +42,7 @@ class UnlockActivity : Activity() {
     private var requestedDismiss = false
     private var ensureAccess: (() -> Unit)? = null
     private var dismissDeadline = 0L
+    private var requestSystemDismiss = true
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val request = pending?.takeIf { it.id == intent.getStringExtra("requestId") }
@@ -49,6 +50,7 @@ class UnlockActivity : Activity() {
         try { request.ensure() } catch (_: Exception) { finishAndRemoveTask(); return }
         request.activity = this
         ensureAccess = request.ensure
+        requestSystemDismiss = request.requestSystemDismiss
         dismissDeadline = SystemClock.elapsedRealtime() + 3000
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setShowWhenLocked(true)
@@ -70,7 +72,7 @@ class UnlockActivity : Activity() {
         if (hasFocus) window.decorView.post(::requestDismiss)
     }
     private fun requestDismiss() {
-        if (isFinishing || isDestroyed || requestedDismiss || SystemClock.elapsedRealtime() >= dismissDeadline) return
+        if (!requestSystemDismiss || isFinishing || isDestroyed || requestedDismiss || SystemClock.elapsedRealtime() >= dismissDeadline) return
         try { ensureAccess?.invoke() ?: return } catch (_: Exception) { finishAndRemoveTask(); return }
         requestedDismiss = true
         dismissStatus = "requested"

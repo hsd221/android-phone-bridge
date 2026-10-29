@@ -19,8 +19,15 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONObject
 import kotlin.coroutines.resume
 
+internal enum class RevealPhase { BEFORE_SWIPE, AFTER_SWIPE, FOUND_BOUNCER }
+
 /** All credential handling stays inside the APK; remote tools cannot inspect this tree. */
-class LocalUnlocker(private val context: Context, private val prefs: BridgePrefs) {
+class LocalUnlocker internal constructor(
+    private val context: Context,
+    private val prefs: BridgePrefs,
+    private val requestSystemDismiss: Boolean = true,
+    private val onReveal: (RevealPhase) -> Unit = {},
+) {
     companion object {
         fun screenState(context: Context): JSONObject {
             val keyguard = context.getSystemService(KeyguardManager::class.java)
@@ -45,7 +52,7 @@ class LocalUnlocker(private val context: Context, private val prefs: BridgePrefs
         }
         val accessibility = PhoneAccessibilityService.instance
             ?: throw ToolFailure("ACCESSIBILITY_UNAVAILABLE", "请在系统设置中启用手机工具桥无障碍服务")
-        val activity = UnlockActivity.open(accessibility, ::checkAccess)
+        val activity = UnlockActivity.open(accessibility, ::checkAccess, requestSystemDismiss)
         var attempted = false
         try {
             // Give Android time to wake, dismiss a trusted/swipe keyguard, or show its bouncer.
@@ -56,7 +63,7 @@ class LocalUnlocker(private val context: Context, private val prefs: BridgePrefs
             }
             val credential = store.read()
                 ?: throw ToolFailure("USER_UNLOCK_REQUIRED", "请在手机上解锁；自动输入需要在本机配置 PIN、密码或图案，指纹与人脸由系统处理")
-            val root = awaitBouncer(accessibility, credential.kind, ::checkAccess) ?: return success("system")
+            val root = awaitBouncer(accessibility, activity, credential.kind, ::checkAccess) ?: return success("system")
             preflight(root, credential)
             checkAccess()
             store.beginAttempt()
@@ -132,15 +139,109 @@ class LocalUnlocker(private val context: Context, private val prefs: BridgePrefs
         UnlockKind.PATTERN -> "lockPatternView"
     })
 
-    private suspend fun awaitBouncer(accessibility: PhoneAccessibilityService, kind: UnlockKind, ensure: () -> Unit): AccessibilityNodeInfo? {
-        val deadline = SystemClock.elapsedRealtime() + 4000
+    private suspend fun waitForBouncer(accessibility: PhoneAccessibilityService, kind: UnlockKind, timeoutMs: Long, ensure: () -> Unit): AccessibilityNodeInfo? {
+        val deadline = SystemClock.elapsedRealtime() + timeoutMs
         while (SystemClock.elapsedRealtime() < deadline) {
             ensure()
             if (!keyguard.isKeyguardLocked && !keyguard.isDeviceLocked) return null
             systemRoot(accessibility, allowInputMethod = kind == UnlockKind.PASSWORD)?.let { root -> if (entry(root, kind) != null) return root }
             delay(100)
         }
-        throw ToolFailure("UNLOCK_UNSUPPORTED", "未识别到与本地配置匹配的系统锁屏。此设备或当前解锁方式需要在手机上手动解锁")
+        return null
+    }
+
+    private fun bouncerPresent(accessibility: PhoneAccessibilityService): Boolean = accessibility.windows.any { window ->
+        if (window.displayId != Display.DEFAULT_DISPLAY) return@any false
+        val root = window.root ?: return@any false
+        val owner = root.packageName?.toString() ?: return@any false
+        if (owner !in keyguardPackages) return@any false
+        // Inspect identifiers only. Never read a credential field's text here.
+        listOf("pinEntry", "passwordEntry", "lockPatternView").any { id ->
+            root.findAccessibilityNodeInfosByViewId("$owner:id/$id").any { it.isVisibleToUser }
+        }
+    }
+
+    private suspend fun awaitBouncer(accessibility: PhoneAccessibilityService, activity: UnlockActivity, kind: UnlockKind, ensure: () -> Unit): AccessibilityNodeInfo? {
+        waitForBouncer(accessibility, kind, 1500, ensure)?.let { root ->
+            onReveal(RevealPhase.FOUND_BOUNCER); ensure(); return root
+        }
+        ensure()
+        if (!keyguard.isKeyguardLocked && !keyguard.isDeviceLocked) return null
+        if (UnlockActivity.dismissStatus == "cancelled") throw ToolFailure("USER_UNLOCK_REQUIRED", "系统解锁请求已取消，请在手机上处理")
+        // Existing controls may belong to another lock method or be obstructed. A
+        // swipe could submit a partial pattern, so never swipe in that state.
+        if (bouncerPresent(accessibility)) unsupported()
+
+        // Some OEMs wake the phone without showing credentials in response to
+        // requestDismissKeyguard. Remove our helper, then reveal the real keyguard.
+        activity.finishAndRemoveTask()
+        delay(300)
+        ensure()
+        if (!keyguard.isKeyguardLocked && !keyguard.isDeviceLocked) return null
+        if (!bouncerPresent(accessibility) && awaitRevealWindow(accessibility, ensure)) {
+            onReveal(RevealPhase.BEFORE_SWIPE)
+            ensure()
+            val bounds = revealBounds(accessibility)
+            val x = bounds.exactCenterX()
+            val path = Path().apply {
+                moveTo(x, bounds.top + bounds.height() * .72f)
+                lineTo(x, bounds.top + bounds.height() * .28f)
+            }
+            dispatchLocalGesture(accessibility, path, 500, ensure)
+            onReveal(RevealPhase.AFTER_SWIPE)
+            ensure()
+        }
+        val root = waitForBouncer(accessibility, kind, 4000, ensure)
+        if (!keyguard.isKeyguardLocked && !keyguard.isDeviceLocked) return null
+        if (root == null) throw ToolFailure("UNLOCK_UI_UNAVAILABLE", "已唤醒并尝试显示验证界面，但未识别到系统解锁键盘；尚未输入凭据，请在手机上处理")
+        onReveal(RevealPhase.FOUND_BOUNCER); ensure()
+        return root
+    }
+
+    private suspend fun awaitRevealWindow(accessibility: PhoneAccessibilityService, ensure: () -> Unit): Boolean {
+        // Finishing the helper can briefly leave windows with null roots. Wait for
+        // a verifiable system surface; never substitute guessed coordinates.
+        val deadline = SystemClock.elapsedRealtime() + 2000
+        var refusal: ToolFailure? = null
+        while (SystemClock.elapsedRealtime() < deadline) {
+            ensure()
+            if ((!keyguard.isKeyguardLocked && !keyguard.isDeviceLocked) || bouncerPresent(accessibility)) return false
+            try { revealBounds(accessibility); return true }
+            catch (failure: ToolFailure) {
+                if (failure.code != "UNLOCK_UNSUPPORTED") throw failure
+                refusal = failure
+            }
+            delay(100)
+        }
+        throw refusal ?: ToolFailure("UNLOCK_UNSUPPORTED", "未能确认系统锁屏窗口，尚未输入凭据，请手动解锁")
+    }
+
+    private fun revealBounds(accessibility: PhoneAccessibilityService): Rect {
+        if (!keyguard.isKeyguardLocked || !keyguard.isDeviceLocked || !context.getSystemService(PowerManager::class.java).isInteractive || bouncerPresent(accessibility)) {
+            throw ToolFailure("UNLOCK_INTERRUPTED", "锁屏界面状态已改变，已停止显示解锁键盘")
+        }
+        val metrics = accessibility.resources.displayMetrics
+        val windows = accessibility.windows.filter { it.displayId == Display.DEFAULT_DISPLAY }
+        val target = windows.firstOrNull { window ->
+            val root = window.root ?: return@firstOrNull false
+            val owner = root.packageName?.toString() ?: return@firstOrNull false
+            val bounds = Rect().also(window::getBoundsInScreen)
+            owner in keyguardPackages && root.isVisibleToUser && window.type != AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY &&
+                bounds.width() >= metrics.widthPixels * .8f && bounds.height() >= metrics.heightPixels * .8f
+        } ?: throw ToolFailure("UNLOCK_UNSUPPORTED", "无法安全确认系统锁屏壁纸窗口，尚未输入凭据，请手动解锁")
+        val owner = target.root?.packageName?.toString() ?: unsupported()
+        val info = context.packageManager.getApplicationInfo(owner, 0)
+        if (info.flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) == 0) unsupported()
+        val bounds = Rect().also(target::getBoundsInScreen)
+        val swipeBounds = Rect(
+            (bounds.exactCenterX() - 2).toInt(), (bounds.top + bounds.height() * .28f).toInt(),
+            (bounds.exactCenterX() + 2).toInt(), (bounds.top + bounds.height() * .72f).toInt(),
+        )
+        if (windows.any { window ->
+                window.layer > target.layer && Rect.intersects(swipeBounds, Rect().also(window::getBoundsInScreen)) &&
+                    window.root?.packageName?.toString() !in keyguardPackages
+            }) throw ToolFailure("UNLOCK_UNSUPPORTED", "系统锁屏滑动区域被其他窗口覆盖，尚未输入凭据，请在手机上处理")
+        return bounds
     }
 
     private fun preflight(root: AccessibilityNodeInfo, credential: UnlockCredential) {
@@ -224,6 +325,15 @@ class LocalUnlocker(private val context: Context, private val prefs: BridgePrefs
             if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
         val gesture = GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, (value.length * 120L).coerceAtLeast(600))).build()
+        dispatchLocalGesture(accessibility, gesture, ensure)
+    }
+
+    private suspend fun dispatchLocalGesture(accessibility: PhoneAccessibilityService, path: Path, durationMs: Long, ensure: () -> Unit) {
+        val gesture = GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, durationMs)).build()
+        dispatchLocalGesture(accessibility, gesture, ensure)
+    }
+
+    private suspend fun dispatchLocalGesture(accessibility: PhoneAccessibilityService, gesture: GestureDescription, ensure: () -> Unit) {
         ensure()
         val completed = suspendCancellableCoroutine { continuation ->
             val accepted = accessibility.dispatchGesture(gesture, object : AccessibilityService.GestureResultCallback() {
@@ -232,6 +342,6 @@ class LocalUnlocker(private val context: Context, private val prefs: BridgePrefs
             }, null)
             if (!accepted && continuation.isActive) continuation.resume(false)
         }
-        if (!completed) throw ToolFailure("UNLOCK_INTERRUPTED", "系统取消了本地图案输入")
+        if (!completed) throw ToolFailure("UNLOCK_INTERRUPTED", "系统取消了本地解锁手势")
     }
 }

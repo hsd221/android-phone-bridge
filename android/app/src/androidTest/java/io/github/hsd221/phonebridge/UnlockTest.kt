@@ -2,6 +2,7 @@ package io.github.hsd221.phonebridge
 
 import android.app.KeyguardManager
 import android.app.UiAutomation
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.ComponentName
 import android.content.Context
 import android.graphics.Rect
@@ -11,6 +12,7 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.view.View
 import android.view.WindowManager
+import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Button
 import android.widget.EditText
 import androidx.test.core.app.ActivityScenario
@@ -170,8 +172,20 @@ class UnlockTest {
         delay(300)
         shell("wm dismiss-keyguard")
         delay(500)
-        shell("input text ${credential.value}")
-        shell("input keyevent KEYCODE_ENTER")
+        val automation = instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
+        automation.serviceInfo = automation.serviceInfo.apply {
+            flags = flags or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+        }
+        fun keyNode(id: String): AccessibilityNodeInfo? = automation.windows.asSequence().mapNotNull { it.root }
+            .filter { it.packageName?.toString() == "com.android.systemui" }
+            .flatMap { it.findAccessibilityNodeInfosByViewId("com.android.systemui:id/$id").asSequence() }
+            .firstOrNull { it.isVisibleToUser && it.isEnabled }
+        eventually("Synthetic local recovery did not expose a PIN keypad") { keyNode("key_enter") != null }
+        for (digit in credential.value) {
+            assertTrue("Synthetic local recovery click was rejected", keyNode("key$digit")?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true)
+            delay(80)
+        }
+        assertTrue("Synthetic local recovery confirmation was rejected", keyNode("key_enter")?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true)
         eventually("Synthetic local PIN recovery did not unlock") { !keyguard.isKeyguardLocked }
     }
 
@@ -213,6 +227,9 @@ class UnlockTest {
             shell("settings put secure accessibility_enabled 1")
             eventually("Accessibility service did not bind") { PhoneAccessibilityService.instance != null }
             eventually("Phone bridge did not connect") { BridgeService.connected }
+            val version = ok("phone_status")
+            assertEquals(BuildConfig.VERSION_NAME, version.getString("appVersion"))
+            assertEquals(BuildConfig.VERSION_CODE, version.getInt("appVersionCode"))
             denied("CAPABILITY_DENIED", "phone_unlock")
             prefs.setCapabilities(true)
             assertFalse("Ordinary capability grant enabled unlock", prefs.unlockEnabled)

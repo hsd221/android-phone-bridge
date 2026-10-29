@@ -31,11 +31,11 @@ try {
   const pair = bridge.identities.createPairing();
   // Actual lock credentials are generated and used only inside instrumentation on the
   // dedicated emulator. They never enter Bridge configuration, tool arguments or output.
-  const result = await adb('shell', 'am', 'instrument', '-w', '-r', '-e', 'class', 'io.github.hsd221.phonebridge.UnlockTest',
+  const result = await adb('shell', 'am', 'instrument', '-w', '-r', '-e', 'class', 'io.github.hsd221.phonebridge.UnlockTest,io.github.hsd221.phonebridge.UnlockBouncerTest',
     '-e', 'unlockTest', 'true', '-e', 'bridgeUrl', config.publicUrl, '-e', 'pairCode', pair.code,
     '-e', 'harnessToken', token, 'io.github.hsd221.phonebridge.test/androidx.test.runner.AndroidJUnitRunner');
   process.stdout.write(result);
-  assert(result.includes('OK (1 test)') && !result.includes('FAILURES'), 'Local unlock instrumentation failed');
+  assert(result.includes('OK (2 tests)') && !result.includes('FAILURES'), 'Local unlock instrumentation failed');
 } finally {
   bridge.identities.revoke(); bridge.broker.disconnect();
   try {

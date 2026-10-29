@@ -1,5 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
+        <activity android:name="io.github.hsd221.phonebridge.UnlockUnknownWindowFixture"
+            android:exported="true" android:launchMode="singleTask"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
         <service android:name="io.github.hsd221.phonebridge.UnlockOverlayFixture"
             android:process=":unlock_overlay" android:exported="true"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
