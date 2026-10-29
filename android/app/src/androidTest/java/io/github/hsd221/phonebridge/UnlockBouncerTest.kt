@@ -14,6 +14,7 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import android.widget.Button
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -322,7 +323,11 @@ class UnlockBouncerTest {
                         assertDiagnostics("not_requested", "UNLOCK_UNSUPPORTED", credentialAttempted = false, revealAttempted = false)
                     } finally { shell("settings put secure enabled_accessibility_services $accessibilityComponent") }
                     eventually("Existing-input obstruction did not disappear") {
-                        PhoneAccessibilityService.instance?.windows?.none { it.root?.packageName?.toString() == instrumentation.context.packageName } == true
+                        // A disconnect can leave an anonymous overlay window briefly;
+                        // it remains an obstruction until the window itself is gone.
+                        PhoneAccessibilityService.instance?.windows?.none {
+                            it.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY || it.root?.packageName?.toString() == instrumentation.context.packageName
+                        } == true
                     }
                     withContext(Dispatchers.Main) {
                         assertTrue("An existing PIN changed while the request was refused", visibleEntries().any { it.isPassword && it.text?.length == 1 })
@@ -411,7 +416,9 @@ class UnlockBouncerTest {
             assertEquals("A third-party overlay allowed a reveal swipe", 0, overlaySwipes)
             shell("settings put secure enabled_accessibility_services $accessibilityComponent")
             eventually("Synthetic intersecting overlay remained visible") {
-                PhoneAccessibilityService.instance?.windows?.none { it.root?.packageName?.toString() == instrumentation.context.packageName } == true
+                PhoneAccessibilityService.instance?.windows?.none {
+                    it.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY || it.root?.packageName?.toString() == instrumentation.context.packageName
+                } == true
             }
             assertTrue(localUnlock().getBoolean("unlocked"))
             note("PASS: intersecting third-party overlay prevents both swipe and credential input.")

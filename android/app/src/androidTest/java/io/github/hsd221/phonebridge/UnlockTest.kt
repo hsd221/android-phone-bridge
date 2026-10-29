@@ -13,6 +13,7 @@ import android.os.SystemClock
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import android.widget.Button
 import android.widget.EditText
 import androidx.test.core.app.ActivityScenario
@@ -331,7 +332,9 @@ class UnlockTest {
             assertTrue(keyguard.isKeyguardLocked)
             shell("settings put secure enabled_accessibility_services $accessibilityComponent")
             eventually("Third-party obstruction did not disappear") {
-                PhoneAccessibilityService.instance?.windows?.none { it.root?.packageName?.toString() == instrumentation.context.packageName } == true
+                PhoneAccessibilityService.instance?.windows?.none {
+                    it.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY || it.root?.packageName?.toString() == instrumentation.context.packageName
+                } == true
             }
             assertTrue(unlockOnce().getBoolean("unlocked"))
             note("PASS: overlapping third-party accessibility overlay refused before credential input; unlock succeeds once it is removed.")
