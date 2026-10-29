@@ -98,6 +98,20 @@ try {
   assert.equal(status.permissions.accessibility, true);
   assert.equal(status.permissions.locationForegroundService, true);
   await adb('shell', 'input', 'keyevent', 'KEYCODE_MENU'); // Simulates the user unlocking a PIN-free test device.
+  // AOSP cold boot can select CELLULAR before WIFI; the handoff can cancel the
+  // socket just after a successful status. Observe three stable seconds after
+  // unlocking, restarting the window on a disconnect, before sending one launch.
+  let connectedSince: number | undefined;
+  await until(async () => {
+    const value = await response('phone_status');
+    if (!value.ok || value.data.connected !== true) {
+      if (!value.ok) assert(['PHONE_OFFLINE', 'CONNECTION_REPLACED', 'TIMEOUT'].includes(value.error.code), JSON.stringify(value));
+      connectedSince = undefined;
+      return false;
+    }
+    connectedSince ??= Date.now();
+    return Date.now() - connectedSince >= 3000;
+  }, 'stable automatic connection after unlocking', 60);
   const launched = await tool('phone_open_app', { packageName: 'io.github.hsd221.phonebridge.demo' });
   assert.equal(launched.path, 'accessibility');
   await until(async () => {
