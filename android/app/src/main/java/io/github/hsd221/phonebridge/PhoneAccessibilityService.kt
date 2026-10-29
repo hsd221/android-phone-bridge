@@ -51,7 +51,7 @@ class PhoneAccessibilityService : AccessibilityService() {
     fun authorizedRoot(tool: String, expectedPackage: String? = null): AccessibilityNodeInfo {
         val policy = prefs.policy()
         policy.requireTool(tool)
-        if (getSystemService(KeyguardManager::class.java).isKeyguardLocked) throw ToolFailure("DEVICE_LOCKED", "请先由用户解锁手机")
+        if (getSystemService(KeyguardManager::class.java).isKeyguardLocked) throw ToolFailure("DEVICE_LOCKED", "设备已锁屏；可调用单独授权的 phone_unlock，或在手机上解锁")
         val operation = tool in setOf("phone_tap", "phone_swipe", "phone_input", "phone_back", "phone_open_app")
         val root = rootInActiveWindow ?: throw ToolFailure("UI_UNAVAILABLE", "当前应用未提供可读取的界面")
         val target = root.packageName?.toString() ?: throw ToolFailure("UI_UNAVAILABLE", "无法确认前台应用")

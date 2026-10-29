@@ -1,4 +1,5 @@
 <resources>
+    <string name="unlock_pattern_count">已选择 %1$d 个点</string>
     <string name="app_name">手机工具桥</string>
     <string name="accessibility_description">将你授权的应用界面和操作提供给已配对的 Bridge。可随时在手机工具桥中暂停全部访问、暂停操作或解除配对。默认不允许访问任何应用。</string>
     <string name="app_permission_summary">显示 %1$d / 共 %2$d 个 · 已选 %3$d 个%4$s</string>

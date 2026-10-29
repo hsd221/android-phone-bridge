@@ -37,9 +37,13 @@ Anthropic 的 Computer Use 让我们看到了大模型直接与操作系统图�
 
 ### 核心能力一览
 
-- **9 项核心 MCP 工具**：
+- **10 项核心 MCP 工具**：
   - 感知：设备状态 (`phone_status`)、实时定位 (`phone_location`)、界面层级 (`phone_ui`)、屏幕截图 (`phone_screenshot`)
-  - 操作：启动应用 (`phone_open_app`)、模拟点击 (`phone_tap`)、手势滑动 (`phone_swipe`)、文本输入 (`phone_input`)、系统返回 (`phone_back`)
+  - 操作：本地解锁 (`phone_unlock`)、启动应用 (`phone_open_app`)、模拟点击 (`phone_tap`)、手势滑动 (`phone_swipe`)、文本输入 (`phone_input`)、系统返回 (`phone_back`)
+- **可选本地解锁**：
+  - 单独开启后，可唤醒手机并请求系统解除锁屏，支持在手机端配置数字 PIN、文字密码或图案；
+  - 锁屏凭据仅在手机本地加密保存与使用，解锁工具无参数，Bridge 和 AI 不接收凭据；
+  - 未识别的系统锁屏、指纹或人脸验证交给用户；一次输入未确认成功后停止自动尝试。
 - **细粒度权限控制**：
   - 默认全部拒绝，支持针对每个应用分别配置“读取”与“操作”权限；
   - “连接 / 访问 / 设置”三页导航，支持系统深色模式、大字体和即时状态刷新；
@@ -64,7 +68,7 @@ Anthropic 的 Computer Use 让我们看到了大模型直接与操作系统图�
 - **[Android 界面与组件 (docs/ANDROID-UI.md)](docs/ANDROID-UI.md)**
   页面分工、权限范围、原生可复用组件及交互约定。
 - 🔌 **[通信协议规范 (docs/PROTOCOL.md)](docs/PROTOCOL.md)**  
-  Bridge 与手机端的 WebSocket 握手协议、消息格式契约、屏幕物理坐标换算公式与 21 个标准错误码速查。
+  Bridge 与手机端的 WebSocket 握手协议、消息格式契约、屏幕物理坐标换算公式与标准错误码速查。
 - 🧪 **[测试与设备验收记录 (docs/TESTING.md)](docs/TESTING.md)**  
   自动化测试执行命令、Android 模拟器端到端闭环断言、CI 跨平台验证矩阵及真机验收规范。
 

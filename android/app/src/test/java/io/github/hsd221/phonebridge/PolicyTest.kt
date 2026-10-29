@@ -36,4 +36,16 @@ class PolicyTest {
         denied("IDENTITY_MISMATCH") { gate.accept(UUID.randomUUID().toString(), "other", 1, 99000, 110000) }
         denied("IDENTITY_MISMATCH") { gate.accept(UUID.randomUUID().toString(), "phone", 2, 99000, 110000) }
     }
+    @Test fun unlockRequiresOperationPermissionAndItsOwnLocalOptIn() {
+        denied("CAPABILITY_DENIED") { AccessPolicy().requireTool("phone_unlock") }
+        denied("CAPABILITY_DENIED") { AccessPolicy(capabilities = Capability.entries.toSet()).requireTool("phone_unlock") }
+        denied("CAPABILITY_DENIED") { AccessPolicy(unlockEnabled = true).requireTool("phone_unlock") }
+        AccessPolicy(capabilities = setOf(Capability.OPERATE), unlockEnabled = true).requireTool("phone_unlock")
+        denied("OPERATIONS_PAUSED") {
+            AccessPolicy(pausedOperations = true, capabilities = Capability.entries.toSet(), unlockEnabled = true).requireTool("phone_unlock")
+        }
+        denied("PAUSED") {
+            AccessPolicy(pausedAll = true, capabilities = Capability.entries.toSet(), unlockEnabled = true).requireTool("phone_unlock")
+        }
+    }
 }

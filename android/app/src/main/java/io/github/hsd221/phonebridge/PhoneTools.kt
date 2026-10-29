@@ -26,6 +26,7 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
         ensure(); prefs.policy().requireTool(tool)
         return when (tool) {
             "phone_status" -> status()
+            "phone_unlock" -> LocalUnlocker(service, prefs).unlock(ensure)
             "phone_location" -> withTimeout(args.optLong("timeoutMs", 15000)) { location(ensure) }
             "phone_ui" -> accessibility().readUi(args.optInt("maxNodes", 300))
             "phone_screenshot" -> accessibility().screenshot(args.optInt("maxDimension", 1080), ensure)
@@ -49,6 +50,10 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
                 .put("backgroundLocation", granted(Manifest.permission.ACCESS_BACKGROUND_LOCATION))
                 .put("locationForegroundService", service.locationForeground).put("notifications", Build.VERSION.SDK_INT < 33 || granted(Manifest.permission.POST_NOTIFICATIONS)))
             .put("apps", apps).put("shizuku", shizuku.status().put("enabledByUser", prefs.shizukuEnabled))
+            .put("screen", LocalUnlocker.screenState(service))
+            .put("unlock", JSONObject().put("enabledByUser", prefs.unlockEnabled)
+                .put("credentialConfigured", LocalUnlockStore(service).configured)
+                .put("retryBlocked", LocalUnlockStore(service).retryBlocked))
     }
     private suspend fun location(ensure: () -> Unit): JSONObject {
         if (!granted(Manifest.permission.ACCESS_COARSE_LOCATION) && !granted(Manifest.permission.ACCESS_FINE_LOCATION)) throw ToolFailure("PERMISSION_REQUIRED", "未授予系统定位权限")
@@ -87,7 +92,7 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
     private suspend fun openApp(packageName: String, ensure: () -> Unit): JSONObject {
         if (packageName == service.packageName) throw ToolFailure("APP_DENIED", "手机工具桥设置不能被远程打开或修改")
         prefs.policy().requireApp(packageName, operation = true)
-        if (service.getSystemService(KeyguardManager::class.java).isKeyguardLocked) throw ToolFailure("DEVICE_LOCKED", "请先由用户解锁手机")
+        if (service.getSystemService(KeyguardManager::class.java).isKeyguardLocked) throw ToolFailure("DEVICE_LOCKED", "设备已锁屏；可调用单独授权的 phone_unlock，或在手机上解锁")
         val launcher = service.packageManager.getLaunchIntentForPackage(packageName) ?: throw ToolFailure("APP_UNAVAILABLE", "未安装此应用或没有可见启动入口")
         if (prefs.shizukuEnabled && shizuku.status().optBoolean("available")) {
             return shizuku.launch(launcher.component ?: throw ToolFailure("APP_UNAVAILABLE", "应用入口无效"), ensure)
@@ -107,7 +112,7 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
             if (value !is Number || value.toDouble() % 1.0 != 0.0 || value.toLong() !in min.toLong()..max.toLong()) throw ToolFailure("INVALID_ARGUMENT", "$key 参数无效")
         }
         val keys = when (tool) {
-            "phone_status" -> emptySet()
+            "phone_status", "phone_unlock" -> emptySet()
             "phone_location" -> setOf("timeoutMs").also { range("timeoutMs", 1000, 20000) }
             "phone_ui" -> setOf("maxNodes").also { range("maxNodes", 1, 500) }
             "phone_screenshot" -> setOf("maxDimension").also { range("maxDimension", 256, 1440) }

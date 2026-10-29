@@ -196,6 +196,10 @@ class MainActivity : Activity() {
         }
         ui.addButton(capabilities, "开启四项能力", viewId = R.id.capabilities_enable_all) { saveSettings("已开启四项能力；应用和系统授权需分别设置") { prefs.setCapabilities(true) } }
         ui.addButton(capabilities, "关闭四项能力", ButtonKind.QUIET, R.id.capabilities_disable_all) { saveSettings("已关闭四项能力") { prefs.setCapabilities(false) } }
+        val unlock = ui.section(this, "锁屏解锁", "独立授权，默认关闭。PIN、密码和图案仅在手机本地加密保存；不会发送到 Bridge。")
+        unlock.addView(ui.actionRow("本地解锁设置", "配置解锁方式、授权与失败恢复。") {
+            startActivity(Intent(this@MainActivity, UnlockSettingsActivity::class.java))
+        }.apply { id = R.id.manage_unlock })
     }
     private fun settingsPage() = ui.column().apply {
         ui.heading(this, "系统设置", "从系统设置返回后，状态自动更新。")

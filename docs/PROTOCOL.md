@@ -128,8 +128,9 @@ Bridge 将来自 MCP 的工具调用封装为 JSON 请求包发送给手机端�
 
 ### 2. 工具列表与坐标体系
 
-协议目前支持 9 项核心工具（具体参数详见 `bridge/src/protocol.ts`）：
-- `phone_status`：查询设备连接状态、Android 系统版本、两级暂停标志、能力开关、按应用授权清单及 Shizuku 运行状态。
+协议目前支持 10 项核心工具（具体参数详见 `bridge/src/protocol.ts`）：
+- `phone_status`：查询设备连接状态、Android 系统版本、两级暂停标志、能力开关、按应用授权清单及 Shizuku 运行状态。`screen` 包含亮屏、键盘锁、设备锁与首解状态；`unlock` 仅包含独立授权、是否配置本地凭据与是否阻止重试，不包含凭据或图案。
+- `phone_unlock`：空参数 `{}`，唤醒并使用手机本地配置请求解锁。需要操作能力及独立解锁授权，受两级暂停控制。一键全开不会开启此授权。PIN、密码与图案不属于协议字段，任何额外参数都会被拒绝。成功返回 `unlocked: true` 与屏幕状态；需要人工或系统不支持时明确返回错误，不能盲目重试。
 - `phone_location`：获取设备当前定位（经纬度、精度及时间戳）。
 - `phone_ui`：获取当前可见窗口的无障碍节点树与文本内容。
 - `phone_screenshot`：获取屏幕截屏（返回图片 Base64 与物理分辨率元数据）。
@@ -214,7 +215,13 @@ Bridge 可主动发送取消消息：
 | `PERMISSION_REQUIRED` | 缺少对应的 Android 系统权限（如普通定位权限未授予）。 |
 | `BACKGROUND_LOCATION_REQUIRED`| 缺少系统“始终允许”后台定位权限。 |
 | `ACCESSIBILITY_UNAVAILABLE` | 手机无障碍服务未启用或被系统强行终止。 |
-| `DEVICE_LOCKED` | 设备处于锁屏或熄屏状态。 |
+| `DEVICE_LOCKED` | 设备处于锁屏状态，常规界面工具拒绝访问。 |
+| `USER_UNLOCK_REQUIRED` | 需用户完成解锁，例如重启首解、生物识别、尚未配置本地凭据或锁屏已有输入。 |
+| `LOCAL_CREDENTIAL_UNAVAILABLE` | 本地凭据无法解密或格式失效，需在手机重新配置。 |
+| `UNLOCK_UNSUPPORTED` | 系统锁屏方式、节点或窗口状态无法安全识别，需手动解锁。 |
+| `UNLOCK_INTERRUPTED` | 本地输入被系统拒绝或锁屏发生变化，已停止输入。 |
+| `UNLOCK_FAILED` | 一次本地输入后未确认成功，已阻止后续自动输入。 |
+| `UNLOCK_RETRY_BLOCKED` | 上次输入未确认成功，需用户在手机本地检查并重新允许尝试。 |
 | `UI_UNAVAILABLE` | 无法从无障碍服务获取当前界面的节点信息。 |
 | `WINDOW_UNAVAILABLE` | 检测到安全窗口、密码键盘或未授权的系统覆盖层。 |
 | `SCREENSHOT_UNAVAILABLE` | 系统拒绝了截图请求（如处于受安全保护的界面）。 |

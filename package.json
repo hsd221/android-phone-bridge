@@ -12,6 +12,7 @@
     "test": "tsx --test bridge/test/*.test.ts",
     "test:android": "tsx scripts/android-smoke.ts",
     "test:android:boot": "tsx scripts/android-boot.ts",
+    "test:android:unlock": "tsx scripts/android-unlock.ts",
     "start": "node dist/cli.js",
     "dev": "tsx bridge/src/cli.ts"
   },

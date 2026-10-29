@@ -1,4 +1,16 @@
 <resources>
+    <item type="id" name="manage_unlock" />
+    <item type="id" name="unlock_enabled" />
+    <item type="id" name="unlock_status" />
+    <item type="id" name="unlock_kind_pin" />
+    <item type="id" name="unlock_kind_password" />
+    <item type="id" name="unlock_kind_pattern" />
+    <item type="id" name="unlock_credential" />
+    <item type="id" name="unlock_pattern_state" />
+    <item type="id" name="unlock_pattern_clear" />
+    <item type="id" name="unlock_save" />
+    <item type="id" name="unlock_reset_attempt" />
+    <item type="id" name="unlock_delete" />
     <item type="id" name="app_permission_search" />
     <item type="id" name="app_permission_list" />
     <item type="id" name="app_permission_summary" />

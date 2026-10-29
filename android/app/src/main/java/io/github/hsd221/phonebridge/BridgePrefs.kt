@@ -17,7 +17,7 @@ data class PhoneIdentity(val url: String, val token: String, val deviceId: Strin
 
 // Authorization changes must be durable before reporting success to the user.
 @SuppressLint("ApplySharedPref")
-class BridgePrefs(context: Context) {
+class BridgePrefs(private val context: Context) {
     val preferences = context.getSharedPreferences("bridge", Context.MODE_PRIVATE)
     private val vault = IdentityVault()
     val deviceId: String get() = preferences.getString("deviceId", null) ?: UUID.randomUUID().toString().also {
@@ -25,18 +25,25 @@ class BridgePrefs(context: Context) {
     }
     var identity: PhoneIdentity?
         get() = readIdentity("identity")
-        set(value) { saveIdentity("identity", value) }
+        set(value) {
+            if (value == null) { unlockEnabled = false; LocalUnlockStore(context).clear() }
+            saveIdentity("identity", value)
+        }
     var pendingRevocation: PhoneIdentity?
         get() = readIdentity("pendingRevocation")
         set(value) { saveIdentity("pendingRevocation", value) }
     var shizukuEnabled: Boolean
         get() = preferences.getBoolean("shizukuEnabled", false)
         set(value) { setFlag("shizukuEnabled", value) }
+    var unlockEnabled: Boolean
+        get() = preferences.getBoolean("unlockEnabled", false)
+        set(value) { setFlag("unlockEnabled", value) }
     fun policy(): AccessPolicy {
         val apps = JSONObject(preferences.getString("apps", "{}")!!)
         return AccessPolicy(preferences.getBoolean("pausedAll", false), preferences.getBoolean("pausedOperations", false),
             Capability.entries.filter { preferences.getBoolean("cap_${it.name}", false) }.toSet(),
-            apps.keys().asSequence().associateWith { val app = apps.getJSONObject(it); AppAccess(app.optBoolean("read"), app.optBoolean("operate")) })
+            apps.keys().asSequence().associateWith { val app = apps.getJSONObject(it); AppAccess(app.optBoolean("read"), app.optBoolean("operate")) },
+            unlockEnabled = unlockEnabled)
     }
     fun setApp(packageName: String, access: AppAccess) {
         setApps(mapOf(packageName to access))
@@ -73,12 +80,12 @@ class BridgePrefs(context: Context) {
     }
 }
 
-private class IdentityVault {
+internal class IdentityVault(private val alias: String = "phone-bridge-identity") {
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        (store.getKey("phone-bridge-identity", null) as? SecretKey)?.let { return it }
+        (store.getKey(alias, null) as? SecretKey)?.let { return it }
         return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
-            init(KeyGenParameterSpec.Builder("phone-bridge-identity", KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+            init(KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build())
         }.generateKey()
     }
@@ -91,4 +98,5 @@ private class IdentityVault {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, bytes.copyOfRange(0, 12))) }
         return cipher.doFinal(bytes.copyOfRange(12, bytes.size)).toString(Charsets.UTF_8)
     }
+    fun destroy() { KeyStore.getInstance("AndroidKeyStore").apply { load(null); deleteEntry(alias) } }
 }

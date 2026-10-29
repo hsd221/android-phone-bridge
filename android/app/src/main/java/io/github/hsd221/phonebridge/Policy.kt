@@ -9,6 +9,7 @@ data class AccessPolicy(
     val pausedOperations: Boolean = false,
     val capabilities: Set<Capability> = emptySet(),
     val apps: Map<String, AppAccess> = emptyMap(),
+    val unlockEnabled: Boolean = false,
 ) {
     fun requireTool(tool: String) {
         // Status stays available as a non-sensitive way to learn why requests are denied.
@@ -18,11 +19,12 @@ data class AccessPolicy(
             "phone_location" -> Capability.LOCATION
             "phone_ui" -> Capability.UI
             "phone_screenshot" -> Capability.SCREENSHOT
-            "phone_open_app", "phone_tap", "phone_swipe", "phone_input", "phone_back" -> Capability.OPERATE
+            "phone_unlock", "phone_open_app", "phone_tap", "phone_swipe", "phone_input", "phone_back" -> Capability.OPERATE
             else -> throw ToolFailure("UNKNOWN_TOOL", "手机不支持此工具")
         }
         if (capability == Capability.OPERATE && pausedOperations) throw ToolFailure("OPERATIONS_PAUSED", "用户已暂停操作")
         if (capability !in capabilities) throw ToolFailure("CAPABILITY_DENIED", "用户未开放此能力：$capability")
+        if (tool == "phone_unlock" && !unlockEnabled) throw ToolFailure("CAPABILITY_DENIED", "请在手机本地单独开启解锁授权")
     }
 
     fun requireApp(packageName: String, operation: Boolean = false) {

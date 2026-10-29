@@ -94,8 +94,15 @@ test('real MCP client lists and calls phone tools, including image content', asy
     });
     await client.connect(new StreamableHTTPClientTransport(new URL(`${f.base}/mcp`), { requestInit: { headers: f.auth } }));
     const tools = await client.listTools();
-    assert.equal(tools.tools.length, 9);
+    assert.equal(tools.tools.length, 10);
     assert(!tools.tools.some(t => /shell/i.test(t.name)));
+    const unlock = tools.tools.find(t => t.name === 'phone_unlock');
+    assert(unlock);
+    assert.deepEqual(unlock.inputSchema.properties, {});
+    assert.equal(unlock.inputSchema.additionalProperties, false);
+    assert.equal(unlock.annotations?.readOnlyHint, false);
+    assert.equal(unlock.annotations?.destructiveHint, true);
+    assert.equal(unlock.annotations?.idempotentHint, false);
     const status = await client.callTool({ name: 'phone_status', arguments: {} });
     assert.equal(status.isError, false);
     const image = await client.callTool({ name: 'phone_screenshot', arguments: {} });
@@ -123,6 +130,63 @@ test('disconnect fails in-flight actions and reconnect never replays them', asyn
     next.on('message', () => messages++);
     next.ping(); await once(next, 'pong');
     assert.equal(messages, 0);
+  } finally { await f.close(); }
+});
+
+test('unlock rejects credential parameters and forwards only an empty command', async () => {
+  const f = await fixture();
+  try {
+    const identity = await f.pair();
+    const ws = await f.connect(identity.token);
+    const incoming: any[] = [];
+    ws.on('message', raw => incoming.push(JSON.parse(raw.toString())));
+    for (const args of [{ pin: 'synthetic-pin' }, { password: 'synthetic-password' }, { pattern: 'synthetic-pattern' }, { text: 'synthetic-text' }]) {
+      assert.equal((await f.call('phone_unlock', args)).error.code, 'INVALID_ARGUMENT');
+    }
+    ws.ping(); await once(ws, 'pong');
+    assert.equal(incoming.length, 0, 'invalid credential-bearing commands must not reach the phone');
+    const request = once(ws, 'message');
+    const pending = f.call('phone_unlock');
+    const [raw] = await request;
+    const message = JSON.parse(raw.toString());
+    assert.equal(message.tool, 'phone_unlock');
+    assert.deepEqual(message.args, {});
+    ws.send(JSON.stringify({ type: 'result', id: message.id, deviceId: f.deviceId, result: { ok: true, data: { unlocked: true, path: 'local_credential' } } }));
+    assert.deepEqual((await pending).data, { unlocked: true, path: 'local_credential' });
+  } finally { await f.close(); }
+});
+
+test('unlock disconnect and cancellation are uncertain operations and never replay', async () => {
+  const f = await fixture();
+  try {
+    const identity = await f.pair();
+    const ws = await f.connect(identity.token);
+    const request = once(ws, 'message');
+    const pending = f.call('phone_unlock');
+    await request;
+    ws.terminate();
+    const result = await pending;
+    assert.equal(result.error.code, 'PHONE_OFFLINE');
+    assert.equal(result.error.outcomeUnknown, true);
+    const next = await f.connect(identity.token);
+    const incoming: any[] = [];
+    next.on('message', raw => incoming.push(JSON.parse(raw.toString())));
+    next.ping(); await once(next, 'pong');
+    assert.equal(incoming.length, 0);
+
+    const controller = new AbortController();
+    const dispatched = once(next, 'message');
+    const cancelled = f.bridge.broker.call('phone_unlock', {}, controller.signal);
+    const [raw] = await dispatched;
+    controller.abort();
+    const cancellation = await cancelled;
+    assert.equal(cancellation.ok, false);
+    if (cancellation.ok) throw new Error('Cancelled unlock succeeded');
+    assert.equal(cancellation.error.code, 'CANCELLED');
+    assert.equal(cancellation.error.outcomeUnknown, true);
+    next.ping(); await once(next, 'pong');
+    assert.equal(incoming[1].type, 'cancel');
+    assert.equal(incoming[1].id, JSON.parse(raw.toString()).id);
   } finally { await f.close(); }
 });
 
@@ -156,7 +220,7 @@ test('stdio CLI forwards MCP calls to the running authenticated bridge', async (
     await writeFile(configPath, JSON.stringify({ ...f.config, port: Number(new URL(f.base).port), publicUrl: f.base }));
     await client.connect(new StdioClientTransport({ command: process.execPath,
       args: ['--import', 'tsx', 'bridge/src/cli.ts', 'mcp', '--config', configPath] }));
-    assert.equal((await client.listTools()).tools.length, 9);
+    assert.equal((await client.listTools()).tools.length, 10);
     const result = await client.callTool({ name: 'phone_status', arguments: {} });
     assert.equal(result.isError, true);
     assert.equal(JSON.parse((result.content as any[])[0].text).error.code, 'PHONE_OFFLINE');
