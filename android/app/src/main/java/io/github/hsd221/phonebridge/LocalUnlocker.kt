@@ -14,18 +14,18 @@ import android.os.UserManager
 import android.view.Display
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONObject
 import kotlin.coroutines.resume
 
-internal enum class RevealPhase { BEFORE_SWIPE, AFTER_SWIPE, FOUND_BOUNCER }
+internal enum class RevealPhase { WAKE_READY, BEFORE_SWIPE, AFTER_SWIPE, FOUND_BOUNCER }
 
 /** All credential handling stays inside the APK; remote tools cannot inspect this tree. */
 class LocalUnlocker internal constructor(
     private val context: Context,
     private val prefs: BridgePrefs,
-    private val requestSystemDismiss: Boolean = true,
     private val onReveal: (RevealPhase) -> Unit = {},
 ) {
     companion object {
@@ -41,38 +41,64 @@ class LocalUnlocker internal constructor(
     private val store = LocalUnlockStore(context)
 
     suspend fun unlock(ensure: () -> Unit): JSONObject {
-        fun checkAccess() { ensure(); prefs.policy().requireTool("phone_unlock") }
+        var activity: UnlockActivity? = null
+        fun checkAccess() { ensure(); prefs.policy().requireTool("phone_unlock"); activity?.ensureNotCancelled() }
         checkAccess()
-        if (!context.getSystemService(UserManager::class.java).isUserUnlocked) {
-            throw ToolFailure("USER_UNLOCK_REQUIRED", "重启后请先在手机上完成首次解锁")
-        }
-        if (!keyguard.isKeyguardLocked && !keyguard.isDeviceLocked && context.getSystemService(PowerManager::class.java).isInteractive) return success("already_unlocked")
-        if (keyguard.isKeyguardLocked && store.retryBlocked) {
-            throw ToolFailure("UNLOCK_RETRY_BLOCKED", "上次自动解锁未确认成功，请在手机本地检查并重新允许尝试")
-        }
-        val accessibility = PhoneAccessibilityService.instance
-            ?: throw ToolFailure("ACCESSIBILITY_UNAVAILABLE", "请在系统设置中启用手机工具桥无障碍服务")
-        val activity = UnlockActivity.open(accessibility, ::checkAccess, requestSystemDismiss)
+        UnlockDiagnostics.begin()
         var attempted = false
         try {
-            // Give Android time to wake, dismiss a trusted/swipe keyguard, or show its bouncer.
-            repeat(10) {
-                checkAccess()
-                if (!keyguard.isKeyguardLocked && !keyguard.isDeviceLocked && context.getSystemService(PowerManager::class.java).isInteractive) return success("system")
-                delay(100)
+            if (!context.getSystemService(UserManager::class.java).isUserUnlocked) {
+                throw ToolFailure("USER_UNLOCK_REQUIRED", "重启后请先在手机上完成首次解锁")
             }
-            val credential = store.read()
-                ?: throw ToolFailure("USER_UNLOCK_REQUIRED", "请在手机上解锁；自动输入需要在本机配置 PIN、密码或图案，指纹与人脸由系统处理")
-            val root = awaitBouncer(accessibility, activity, credential.kind, ::checkAccess) ?: return success("system")
+            if (!keyguard.isKeyguardLocked && !keyguard.isDeviceLocked && context.getSystemService(PowerManager::class.java).isInteractive) return success("already_unlocked")
+            if (keyguard.isKeyguardLocked && store.retryBlocked) {
+                throw ToolFailure("UNLOCK_RETRY_BLOCKED", "上次自动解锁未确认成功，请在手机本地检查并重新允许尝试")
+            }
+            val accessibility = PhoneAccessibilityService.instance
+                ?: throw ToolFailure("ACCESSIBILITY_UNAVAILABLE", "请在系统设置中启用手机工具桥无障碍服务")
+            val credential: UnlockCredential
+            val root: AccessibilityNodeInfo
+            if (context.getSystemService(PowerManager::class.java).isInteractive && bouncerPresent(accessibility)) {
+                // Opening a show-when-locked activity can hide an existing bouncer
+                // and clear a user's partial entry. Do not disturb that surface.
+                credential = store.read() ?: throw ToolFailure("USER_UNLOCK_REQUIRED", "请在手机上完成当前系统解锁")
+                root = systemRoot(accessibility, allowInputMethod = credential.kind == UnlockKind.PASSWORD) ?: unsupported()
+                if (entry(root, credential.kind) == null) unsupported()
+                UnlockDiagnostics.stage(UnlockDiagnostics.Stage.WAITING_FOR_BOUNCER)
+                onReveal(RevealPhase.FOUND_BOUNCER)
+                checkAccess()
+            } else {
+                // OEMs can cancel a system-dismiss request while hiding its bouncer.
+                // Configured local credentials use the verified reveal path directly;
+                // phones without a local credential retain Android's system dismissal.
+                val systemDismiss = !store.configured
+                UnlockDiagnostics.waking(systemDismiss)
+                val opened = UnlockActivity.open(accessibility, ::checkAccess, systemDismiss)
+                activity = opened
+                onReveal(RevealPhase.WAKE_READY)
+                checkAccess()
+                // Give Android time to wake or complete a trusted/system dismissal.
+                repeat(10) {
+                    checkAccess()
+                    if (!keyguard.isKeyguardLocked && !keyguard.isDeviceLocked && context.getSystemService(PowerManager::class.java).isInteractive) return success("system")
+                    delay(100)
+                }
+                credential = store.read()
+                    ?: throw ToolFailure("USER_UNLOCK_REQUIRED", "请在手机上解锁；自动输入需要在本机配置 PIN、密码或图案，指纹与人脸由系统处理")
+                root = awaitBouncer(accessibility, opened, credential.kind, ::checkAccess) ?: return success("system")
+            }
+            UnlockDiagnostics.stage(UnlockDiagnostics.Stage.PREFLIGHT)
             preflight(root, credential)
             checkAccess()
             store.beginAttempt()
             attempted = true
+            UnlockDiagnostics.enteringCredential()
             when (credential.kind) {
                 UnlockKind.PIN -> enterPin(accessibility, credential.value, ::checkAccess)
                 UnlockKind.PASSWORD -> enterPassword(accessibility, credential.value, ::checkAccess)
                 UnlockKind.PATTERN -> enterPattern(accessibility, credential.value, ::checkAccess)
             }
+            UnlockDiagnostics.stage(UnlockDiagnostics.Stage.VERIFYING)
             repeat(60) {
                 checkAccess()
                 if (!keyguard.isKeyguardLocked && !keyguard.isDeviceLocked) {
@@ -83,19 +109,29 @@ class LocalUnlocker internal constructor(
             }
             throw ToolFailure("UNLOCK_FAILED", "未确认解锁成功，已停止自动尝试。请在手机本地检查解锁方式和凭据后重新允许尝试", true)
         } catch (failure: ToolFailure) {
+            UnlockDiagnostics.finish(failure.code)
             throw if (attempted && !failure.outcomeUnknown) ToolFailure(failure.code, failure.message, true) else failure
+        } catch (failure: CancellationException) {
+            UnlockDiagnostics.finish("CANCELLED")
+            throw failure
+        } catch (failure: Exception) {
+            UnlockDiagnostics.finish("EXECUTION_FAILED")
+            throw failure
         } finally {
-            activity.finishAndRemoveTask()
-            accessibility.invalidate()
+            activity?.finishAndRemoveTask()
+            PhoneAccessibilityService.instance?.invalidate()
         }
     }
 
-    private fun success(path: String) = JSONObject().put("unlocked", true).put("path", path).put("screen", screenState(context))
+    private fun success(path: String): JSONObject {
+        UnlockDiagnostics.finish("SUCCESS")
+        return JSONObject().put("unlocked", true).put("path", path).put("screen", screenState(context))
+    }
 
     private fun systemRoot(accessibility: PhoneAccessibilityService, allowInputMethod: Boolean = false): AccessibilityNodeInfo? {
         if (!keyguard.isKeyguardLocked || !context.getSystemService(PowerManager::class.java).isInteractive) return null
-        // UnlockActivity is deliberately visible above the keyguard so Android can
-        // deliver requestDismissKeyguard. It therefore becomes rootInActiveWindow;
+        // UnlockActivity wakes the device and, without a local credential, lets
+        // Android dismiss keyguard. It can therefore become rootInActiveWindow;
         // resolve the actual keyguard from the window list instead of trusting focus.
         val windows = accessibility.windows.filter { it.displayId == Display.DEFAULT_DISPLAY }
         val target = windows.firstOrNull { window ->
@@ -162,6 +198,7 @@ class LocalUnlocker internal constructor(
     }
 
     private suspend fun awaitBouncer(accessibility: PhoneAccessibilityService, activity: UnlockActivity, kind: UnlockKind, ensure: () -> Unit): AccessibilityNodeInfo? {
+        UnlockDiagnostics.stage(UnlockDiagnostics.Stage.WAITING_FOR_BOUNCER)
         waitForBouncer(accessibility, kind, 1500, ensure)?.let { root ->
             onReveal(RevealPhase.FOUND_BOUNCER); ensure(); return root
         }
@@ -174,7 +211,7 @@ class LocalUnlocker internal constructor(
 
         // Some OEMs wake the phone without showing credentials in response to
         // requestDismissKeyguard. Remove our helper, then reveal the real keyguard.
-        activity.finishAndRemoveTask()
+        activity.releaseToKeyguard()
         delay(300)
         ensure()
         if (!keyguard.isKeyguardLocked && !keyguard.isDeviceLocked) return null
@@ -187,6 +224,7 @@ class LocalUnlocker internal constructor(
                 moveTo(x, bounds.top + bounds.height() * .72f)
                 lineTo(x, bounds.top + bounds.height() * .28f)
             }
+            UnlockDiagnostics.revealing()
             dispatchLocalGesture(accessibility, path, 500, ensure)
             onReveal(RevealPhase.AFTER_SWIPE)
             ensure()
@@ -199,6 +237,7 @@ class LocalUnlocker internal constructor(
     }
 
     private suspend fun awaitRevealWindow(accessibility: PhoneAccessibilityService, ensure: () -> Unit): Boolean {
+        UnlockDiagnostics.stage(UnlockDiagnostics.Stage.WAITING_FOR_KEYGUARD)
         // Finishing the helper can briefly leave windows with null roots. Wait for
         // a verifiable system surface; never substitute guessed coordinates.
         val deadline = SystemClock.elapsedRealtime() + 2000
@@ -254,11 +293,13 @@ class LocalUnlocker internal constructor(
         val field = entry(root, credential.kind) ?: unsupported()
         when (credential.kind) {
             UnlockKind.PIN -> {
-                if (!field.isPassword || !field.text.isNullOrEmpty()) throw ToolFailure("USER_UNLOCK_REQUIRED", "锁屏输入框已有内容或状态不明，请先在手机上处理")
+                if (!field.isPassword) unsupported()
+                if (!field.text.isNullOrEmpty()) throw ToolFailure("USER_UNLOCK_REQUIRED", "锁屏输入框已有内容，请先在手机上处理")
                 if (credential.value.any { node(root, "key$it")?.isClickable != true } || node(root, "key_enter")?.isClickable != true) unsupported()
             }
             UnlockKind.PASSWORD -> {
-                if (!field.isPassword || !field.isEditable || !field.text.isNullOrEmpty()) throw ToolFailure("USER_UNLOCK_REQUIRED", "锁屏输入框已有内容或状态不明，请先在手机上处理")
+                if (!field.isPassword || !field.isEditable) unsupported()
+                if (!field.text.isNullOrEmpty()) throw ToolFailure("USER_UNLOCK_REQUIRED", "锁屏输入框已有内容，请先在手机上处理")
                 if (field.actionList.none { it.id == AccessibilityNodeInfo.ACTION_SET_TEXT } ||
                     field.actionList.none { it.id == AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id }) unsupported()
             }

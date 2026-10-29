@@ -11,7 +11,10 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.view.Display
 import android.view.KeyEvent
+import android.view.View
+import android.view.ViewGroup
 import android.view.accessibility.AccessibilityNodeInfo
+import android.widget.Button
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -95,10 +98,10 @@ class UnlockBouncerTest {
             }
         }
 
-    private fun assertNoCredentialInput() {
+    private fun assertNoCredentialInput(allowExistingInput: Boolean = false) {
         assertTrue("Aborted fallback unexpectedly unlocked the phone", keyguard.isKeyguardLocked)
         assertFalse("Aborted fallback started credential input", LocalUnlockStore(context).retryBlocked)
-        assertFalse("Aborted fallback left credential text in a system field", visibleEntries().any { it.isPassword && !it.text.isNullOrEmpty() })
+        if (!allowExistingInput) assertFalse("Aborted fallback left credential text in a system field", visibleEntries().any { it.isPassword && !it.text.isNullOrEmpty() })
     }
 
     private fun topology(): String = "dismiss=${UnlockActivity.dismissStatus}, locked=${keyguard.isKeyguardLocked}, deviceLocked=${keyguard.isDeviceLocked}, interactive=${power.isInteractive}, display=${context.resources.displayMetrics.widthPixels}x${context.resources.displayMetrics.heightPixels}; " +
@@ -110,26 +113,69 @@ class UnlockBouncerTest {
             "${root?.packageName}:type=${window.type},layer=${window.layer},active=${window.isActive},focused=${window.isFocused},visible=${root?.isVisibleToUser},bounds=${Rect().also(window::getBoundsInScreen)}, $markers"
         }
 
-    private suspend fun localUnlock(
-        requestSystemDismiss: Boolean = true,
-        onReveal: (RevealPhase) -> Unit = {},
-    ): JSONObject = withContext(Dispatchers.Main) {
+    private suspend fun localUnlock(onReveal: (RevealPhase) -> Unit = {}): JSONObject = withContext(Dispatchers.Main) {
+        val expectSystemDismiss = !store.configured
         try {
-            LocalUnlocker(context, prefs, requestSystemDismiss, onReveal).unlock {}
+            LocalUnlocker(context, prefs) { phase ->
+                if (phase == RevealPhase.WAKE_READY) {
+                    val helper = UnlockActivity.current
+                    assertNotNull("Wake-ready helper was not observable", helper)
+                    assertEquals("Default unlock selected the wrong helper mode", expectSystemDismiss, helper!!.usesSystemDismiss)
+                    if (!expectSystemDismiss) assertEquals("wake_only", UnlockActivity.dismissStatus)
+                }
+                onReveal(phase)
+            }.unlock {}
         } catch (failure: ToolFailure) {
             note("Local failure ${failure.code}: ${failure.message}; " + topology())
             throw failure
         }
     }
 
-    private suspend fun denied(expectedCode: String, action: suspend () -> Unit) {
+    private suspend fun denied(expectedCode: String, allowExistingInput: Boolean = false, action: suspend () -> Unit): ToolFailure {
         var failure: ToolFailure? = null
         try { action() } catch (caught: ToolFailure) { failure = caught }
         assertNotNull("Expected local refusal $expectedCode", failure)
         assertEquals(expectedCode, failure!!.code)
         withContext(Dispatchers.Main) { note("Expected local refusal ${failure.code}: ${failure.message}; " + topology()) }
         assertFalse("No credential was dispatched, so refusal is certain", failure.outcomeUnknown)
-        withContext(Dispatchers.Main) { assertNoCredentialInput() }
+        withContext(Dispatchers.Main) { assertNoCredentialInput(allowExistingInput) }
+        return failure
+    }
+
+    private fun assertDiagnostics(mode: String, outcome: String, credentialAttempted: Boolean, revealAttempted: Boolean? = null) {
+        val value = UnlockDiagnostics.snapshot()
+        assertNotNull("No in-memory unlock diagnostics were recorded", value)
+        value!!
+        assertEquals(setOf("stage", "outcome", "systemDismiss", "revealAttempted", "credentialAttempted"), value.keys().asSequence().toSet())
+        assertTrue("Unexpected free-form diagnostic stage", value.getString("stage") in setOf("checking", "waking", "waiting_for_bouncer", "waiting_for_keyguard", "revealing", "preflight", "entering_credential", "verifying"))
+        assertEquals(mode, value.getString("systemDismiss"))
+        assertEquals(outcome, value.getString("outcome"))
+        assertEquals(credentialAttempted, value.getBoolean("credentialAttempted"))
+        if (revealAttempted != null) assertEquals(revealAttempted, value.getBoolean("revealAttempted"))
+        activeCredential?.let { assertFalse("Diagnostics exposed a synthetic credential", value.toString().contains(it.value)) }
+    }
+
+    private fun cancelButton(view: View): Button? = when (view) {
+        is Button -> view.takeIf { it.text == "取消本次解锁" }
+        is ViewGroup -> (0 until view.childCount).firstNotNullOfOrNull { cancelButton(view.getChildAt(it)) }
+        else -> null
+    }
+
+    private fun seedPartialInput(kind: UnlockKind) {
+        val field = visibleEntries().single { it.isPassword }
+        val owner = field.packageName.toString()
+        if (kind == UnlockKind.PIN) {
+            val root = PhoneAccessibilityService.instance!!.windows.mapNotNull { it.root }.first { it.packageName?.toString() == owner && it.findAccessibilityNodeInfosByViewId("$owner:id/key1").isNotEmpty() }
+            assertTrue("Cannot seed a synthetic partial PIN", root.findAccessibilityNodeInfosByViewId("$owner:id/key1").single { it.isVisibleToUser }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        } else {
+            assertTrue("Cannot seed a synthetic partial password", field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "X")
+            }))
+        }
+        // SystemUI is a separate process; wait only for this local action to be visible.
+        val deadline = SystemClock.elapsedRealtime() + 1500
+        while (SystemClock.elapsedRealtime() < deadline && visibleEntries().none { it.isPassword && it.text?.length == 1 }) SystemClock.sleep(50)
+        assertTrue("Synthetic partial input did not settle", visibleEntries().any { it.isPassword && it.text?.length == 1 })
     }
 
     private fun unknownWindow(close: Boolean) {
@@ -172,10 +218,22 @@ class UnlockBouncerTest {
             setSystemCredential(pin)
             eventually("Synthetic keyguard security did not settle") { keyguard.isDeviceSecure }
             delay(500)
+            store.clear()
+            sleepAndLock()
+            var systemHelper = 0
+            denied("USER_UNLOCK_REQUIRED") {
+                localUnlock { if (it == RevealPhase.WAKE_READY) systemHelper++ }
+            }
+            assertEquals("Secure keyguard without a stored credential did not retain the system path", 1, systemHelper)
+            assertDiagnostics("system", "USER_UNLOCK_REQUIRED", credentialAttempted = false, revealAttempted = false)
+            store.save(pin)
+            assertTrue(localUnlock().getBoolean("unlocked"))
+            note("PASS: a secure keyguard without local credentials keeps system dismissal and never starts local credential input.")
+
             sleepAndLock()
             var reproduced = 0
             denied("UNLOCK_UNSUPPORTED") {
-                localUnlock(requestSystemDismiss = false) { phase ->
+                localUnlock { phase ->
                     if (phase == RevealPhase.BEFORE_SWIPE) {
                         assertTrue("Missing-bouncer reproduction found an input field", visibleEntries().isEmpty())
                         reproduced++
@@ -185,7 +243,7 @@ class UnlockBouncerTest {
             }
             assertEquals("Could not reproduce the wallpaper-only state", 1, reproduced)
             assertTrue(localUnlock().getBoolean("unlocked"))
-            note("PASS: suppressed system dismissal reproduces wallpaper-only keyguard with no credential input.")
+            note("PASS: default wake-only helper reaches wallpaper-only keyguard without requesting system dismissal or entering credentials.")
 
             for (credential in listOf(pin, password, pattern)) {
                 note("Checking wallpaper-only ${credential.kind} fallback")
@@ -193,7 +251,7 @@ class UnlockBouncerTest {
                 delay(500)
                 sleepAndLock()
                 val phases = mutableListOf<RevealPhase>()
-                val result = localUnlock(requestSystemDismiss = false) { phases.add(it) }
+                val result = localUnlock { phases.add(it) }
                 assertEquals("local_credential", result.getString("path"))
                 assertTrue(result.getBoolean("unlocked"))
                 assertFalse(keyguard.isKeyguardLocked)
@@ -201,12 +259,115 @@ class UnlockBouncerTest {
                 assertEquals("Missing bouncer was not revealed exactly once", 1, phases.count { it == RevealPhase.BEFORE_SWIPE })
                 assertEquals(1, phases.count { it == RevealPhase.AFTER_SWIPE })
                 assertTrue("Known bouncer was never recognized after reveal", RevealPhase.FOUND_BOUNCER in phases)
+                assertEquals("Wake-only helper was not opened once", 1, phases.count { it == RevealPhase.WAKE_READY })
+                assertDiagnostics("wake_only", "SUCCESS", credentialAttempted = true, revealAttempted = true)
                 note("PASS: wallpaper-only ${credential.kind} reveals once and unlocks locally.")
+            }
+
+            for (credential in listOf(pin, password)) {
+                setSystemCredential(credential)
+                delay(500)
+                sleepAndLock()
+                var seeded = 0
+                val existingInput = denied("USER_UNLOCK_REQUIRED", allowExistingInput = true) {
+                    localUnlock { phase ->
+                        if (phase == RevealPhase.FOUND_BOUNCER) { seedPartialInput(credential.kind); seeded++ }
+                    }
+                }
+                assertEquals("锁屏输入框已有内容，请先在手机上处理", existingInput.message)
+                assertEquals("Existing-input check did not reach a known bouncer once", 1, seeded)
+                withContext(Dispatchers.Main) {
+                    assertTrue("Automatic unlock changed the existing partial input", visibleEntries().any { it.isPassword && it.text?.length == 1 })
+                    assertDiagnostics("wake_only", "USER_UNLOCK_REQUIRED", credentialAttempted = false)
+                    assertEquals("preflight", UnlockDiagnostics.snapshot()!!.getString("stage"))
+                }
+                // The partial value now exists BEFORE another request. Opening a
+                // helper could reset this bouncer, so prove the direct path keeps it.
+                var helpersForExistingInput = 0
+                var swipesForExistingInput = 0
+                val preexistingInput = denied("USER_UNLOCK_REQUIRED", allowExistingInput = true) {
+                    localUnlock { phase ->
+                        if (phase == RevealPhase.WAKE_READY) helpersForExistingInput++
+                        if (phase == RevealPhase.BEFORE_SWIPE) swipesForExistingInput++
+                    }
+                }
+                assertEquals("锁屏输入框已有内容，请先在手机上处理", preexistingInput.message)
+                assertEquals("An existing partial input opened the wake helper", 0, helpersForExistingInput)
+                assertEquals("An existing partial input triggered a reveal swipe", 0, swipesForExistingInput)
+                withContext(Dispatchers.Main) {
+                    assertTrue("Direct preflight changed the pre-existing partial input", visibleEntries().any { it.isPassword && it.text?.length == 1 })
+                    assertDiagnostics("not_requested", "USER_UNLOCK_REQUIRED", credentialAttempted = false, revealAttempted = false)
+                    assertEquals("preflight", UnlockDiagnostics.snapshot()!!.getString("stage"))
+                }
+                if (credential.kind == UnlockKind.PIN) {
+                    store.clear()
+                    var unexpectedHelpers = 0
+                    val noCredential = denied("USER_UNLOCK_REQUIRED", allowExistingInput = true) {
+                        localUnlock { if (it == RevealPhase.WAKE_READY) unexpectedHelpers++ }
+                    }
+                    assertEquals("请在手机上完成当前系统解锁", noCredential.message)
+                    assertEquals("An existing keypad without local credentials opened a helper", 0, unexpectedHelpers)
+                    assertDiagnostics("not_requested", "USER_UNLOCK_REQUIRED", credentialAttempted = false, revealAttempted = false)
+                    store.save(credential)
+
+                    shell("settings put secure enabled_accessibility_services $accessibilityComponent:$overlayComponent")
+                    eventually("Existing-input obstruction did not appear") {
+                        PhoneAccessibilityService.instance?.windows?.any { it.root?.packageName?.toString() == instrumentation.context.packageName } == true
+                    }
+                    try {
+                        denied("UNLOCK_UNSUPPORTED", allowExistingInput = true) {
+                            localUnlock { if (it == RevealPhase.WAKE_READY) unexpectedHelpers++ }
+                        }
+                        assertEquals("An obstructed existing keypad opened a helper", 0, unexpectedHelpers)
+                        assertDiagnostics("not_requested", "UNLOCK_UNSUPPORTED", credentialAttempted = false, revealAttempted = false)
+                    } finally { shell("settings put secure enabled_accessibility_services $accessibilityComponent") }
+                    eventually("Existing-input obstruction did not disappear") {
+                        PhoneAccessibilityService.instance?.windows?.none { it.root?.packageName?.toString() == instrumentation.context.packageName } == true
+                    }
+                    withContext(Dispatchers.Main) {
+                        assertTrue("An existing PIN changed while the request was refused", visibleEntries().any { it.isPassword && it.text?.length == 1 })
+                    }
+                    note("PASS: an existing partial PIN remains unchanged without local credentials or behind a foreign overlay; neither path opens a helper.")
+                }
+                key(KeyEvent.KEYCODE_DEL)
+                eventually("Synthetic partial input could not be cleared locally") { visibleEntries().none { it.isPassword && !it.text.isNullOrEmpty() } }
+                var extraSwipes = 0
+                assertTrue(localUnlock { if (it == RevealPhase.BEFORE_SWIPE) extraSwipes++ }.getBoolean("unlocked"))
+                assertEquals("An existing credential keypad was swiped after local recovery", 0, extraSwipes)
+                note("PASS: an existing partial ${credential.kind} refuses without changing input or setting the retry latch.")
             }
 
             setSystemCredential(pin)
             delay(500)
-            for (phase in listOf(RevealPhase.BEFORE_SWIPE, RevealPhase.AFTER_SWIPE)) {
+            for (cancelWithButton in listOf(false, true)) {
+                sleepAndLock()
+                var cancelledAtWake = 0
+                var revealAfterCancel = 0
+                val failure = denied("USER_UNLOCK_REQUIRED") {
+                    localUnlock { phase ->
+                        if (phase == RevealPhase.WAKE_READY) {
+                            val helper = UnlockActivity.current!!
+                            if (cancelWithButton) {
+                                val button = cancelButton(helper.window.decorView)
+                                assertNotNull("Local unlock cancellation button is missing", button)
+                                assertTrue("Local cancellation click was not accepted", button!!.performClick())
+                            } else {
+                                @Suppress("DEPRECATION")
+                                helper.onBackPressed()
+                            }
+                            cancelledAtWake++
+                        } else if (phase == RevealPhase.BEFORE_SWIPE) revealAfterCancel++
+                    }
+                }
+                assertEquals("本次解锁已在手机上取消", failure.message)
+                assertEquals(1, cancelledAtWake)
+                assertEquals("An explicitly cancelled helper continued to reveal credentials", 0, revealAfterCancel)
+                assertDiagnostics("wake_only", "USER_UNLOCK_REQUIRED", credentialAttempted = false, revealAttempted = false)
+                assertTrue(localUnlock().getBoolean("unlocked"))
+                note("PASS: explicit ${if (cancelWithButton) "local cancel button" else "phone Back callback"} stops before reveal/input; programmatic helper handoff still unlocks.")
+            }
+
+            for (phase in listOf(RevealPhase.WAKE_READY, RevealPhase.BEFORE_SWIPE, RevealPhase.AFTER_SWIPE)) {
                 for (pause in listOf(false, true)) {
                     sleepAndLock()
                     var invoked = 0
@@ -214,18 +375,19 @@ class UnlockBouncerTest {
                     try {
                         if (pause) {
                             denied("OPERATIONS_PAUSED") {
-                                localUnlock(requestSystemDismiss = false) { actual ->
+                                localUnlock { actual ->
                                     if (actual == phase) { invoked++; prefs.setFlag("pausedOperations", true) }
                                 }
                             }
                         } else {
                             try {
-                                localUnlock(requestSystemDismiss = false) { actual ->
+                                localUnlock { actual ->
                                     if (actual == phase) { invoked++; throw CancellationException("Synthetic reveal cancellation") }
                                 }
                             } catch (_: CancellationException) { cancelled = true }
                             assertTrue("Cancellation did not stop fallback", cancelled)
                             withContext(Dispatchers.Main) { assertNoCredentialInput() }
+                            assertDiagnostics("wake_only", "CANCELLED", credentialAttempted = false)
                         }
                         assertEquals("Expected phase hook did not run once", 1, invoked)
                     } finally { prefs.setFlag("pausedOperations", false) }
@@ -244,7 +406,7 @@ class UnlockBouncerTest {
             sleepAndLock()
             var overlaySwipes = 0
             denied("UNLOCK_UNSUPPORTED") {
-                localUnlock(requestSystemDismiss = false) { if (it == RevealPhase.BEFORE_SWIPE) overlaySwipes++ }
+                localUnlock { if (it == RevealPhase.BEFORE_SWIPE) overlaySwipes++ }
             }
             assertEquals("A third-party overlay allowed a reveal swipe", 0, overlaySwipes)
             shell("settings put secure enabled_accessibility_services $accessibilityComponent")
@@ -261,7 +423,7 @@ class UnlockBouncerTest {
             }
             var unknownSwipes = 0
             denied("UNLOCK_UNSUPPORTED") {
-                localUnlock(requestSystemDismiss = false) { if (it == RevealPhase.BEFORE_SWIPE) unknownSwipes++ }
+                localUnlock { if (it == RevealPhase.BEFORE_SWIPE) unknownSwipes++ }
             }
             assertEquals("An unknown foreground window allowed a reveal swipe", 0, unknownSwipes)
             unknownWindow(close = true)

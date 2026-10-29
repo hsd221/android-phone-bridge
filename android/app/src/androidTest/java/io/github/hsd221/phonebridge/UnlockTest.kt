@@ -197,6 +197,17 @@ class UnlockTest {
         assertFalse("Diagnostic string leaked a local credential", credential.toString().contains(credential.value))
     }
 
+    private fun assertLastAttempt(mode: String, outcome: String, credentialAttempted: Boolean) {
+        val value = ok("phone_status").getJSONObject("unlock").getJSONObject("lastAttempt")
+        assertEquals(setOf("stage", "outcome", "systemDismiss", "revealAttempted", "credentialAttempted"), value.keys().asSequence().toSet())
+        assertTrue("Unexpected free-form diagnostic stage", value.getString("stage") in setOf("checking", "waking", "waiting_for_bouncer", "waiting_for_keyguard", "revealing", "preflight", "entering_credential", "verifying"))
+        assertEquals(mode, value.getString("systemDismiss"))
+        assertEquals(outcome, value.getString("outcome"))
+        assertEquals(credentialAttempted, value.getBoolean("credentialAttempted"))
+        assertTrue(value.get("revealAttempted") is Boolean)
+        assertFalse("Fixed diagnostics exposed a synthetic local credential", secrets.any { value.toString().contains(it) })
+    }
+
     @Test fun localUnlockEndToEnd() = runBlocking {
         assumeTrue(arguments.getString("unlockTest") == "true")
         assertTrue("Unlock tests require a dedicated emulator", Build.HARDWARE in setOf("ranchu", "goldfish"))
@@ -281,7 +292,10 @@ class UnlockTest {
             sleepAndLock()
             denied("DEVICE_LOCKED", "phone_ui")
             denied("DEVICE_LOCKED", "phone_screenshot")
-            assertTrue(unlockOnce().getBoolean("unlocked"))
+            val unsecured = unlockOnce()
+            assertTrue(unsecured.getBoolean("unlocked"))
+            assertEquals("system", unsecured.getString("path"))
+            assertLastAttempt("system", "SUCCESS", credentialAttempted = false)
             assertFalse(keyguard.isKeyguardLocked)
             assertTrue(power.isInteractive)
 
@@ -302,6 +316,7 @@ class UnlockTest {
                 assertFalse(keyguard.isKeyguardLocked)
                 assertFalse("Confirmed success kept retry latch set", store.retryBlocked)
                 assertTrue(power.isInteractive)
+                assertLastAttempt("wake_only", "SUCCESS", credentialAttempted = true)
             }
 
             setSystemCredential(pin)
@@ -328,6 +343,7 @@ class UnlockTest {
             val failed = denied("UNLOCK_FAILED", "phone_unlock")
             assertTrue("Failed attempt did not report an uncertain operation", failed.getBoolean("outcomeUnknown"))
             assertTrue("Failed attempt did not persist its retry latch", LocalUnlockStore(context).retryBlocked)
+            assertLastAttempt("wake_only", "UNLOCK_FAILED", credentialAttempted = true)
             denied("UNLOCK_RETRY_BLOCKED", "phone_unlock")
             assertTrue(keyguard.isKeyguardLocked)
             recoverLocally(pin)
@@ -360,6 +376,7 @@ class UnlockTest {
             prefs.identity = null
             assertFalse(store.configured)
             assertFalse(prefs.unlockEnabled)
+            assertNull("Unpairing retained in-memory unlock diagnostics", UnlockDiagnostics.snapshot())
             note("PASS: swipe/PIN/password/pattern unlock, local ciphertext, secure settings, grants/pauses, locked-screen isolation, durable failure/cancellation latch, and unpair cleanup.")
         } finally {
             shell("settings put secure enabled_accessibility_services $accessibilityComponent")

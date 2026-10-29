@@ -54,7 +54,8 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
             .put("screen", LocalUnlocker.screenState(service))
             .put("unlock", JSONObject().put("enabledByUser", prefs.unlockEnabled)
                 .put("credentialConfigured", LocalUnlockStore(service).configured)
-                .put("retryBlocked", LocalUnlockStore(service).retryBlocked))
+                .put("retryBlocked", LocalUnlockStore(service).retryBlocked)
+                .put("lastAttempt", UnlockDiagnostics.snapshot() ?: JSONObject.NULL))
     }
     private suspend fun location(ensure: () -> Unit): JSONObject {
         if (!granted(Manifest.permission.ACCESS_COARSE_LOCATION) && !granted(Manifest.permission.ACCESS_FINE_LOCATION)) throw ToolFailure("PERMISSION_REQUIRED", "未授予系统定位权限")

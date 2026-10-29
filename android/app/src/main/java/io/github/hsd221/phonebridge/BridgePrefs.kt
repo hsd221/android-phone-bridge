@@ -37,7 +37,7 @@ class BridgePrefs(private val context: Context) {
         set(value) { setFlag("shizukuEnabled", value) }
     var unlockEnabled: Boolean
         get() = preferences.getBoolean("unlockEnabled", false)
-        set(value) { setFlag("unlockEnabled", value) }
+        set(value) { setFlag("unlockEnabled", value); if (!value) UnlockDiagnostics.clear() }
     fun policy(): AccessPolicy {
         val apps = JSONObject(preferences.getString("apps", "{}")!!)
         return AccessPolicy(preferences.getBoolean("pausedAll", false), preferences.getBoolean("pausedOperations", false),

@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -24,7 +24,7 @@
         </activity>
         <activity android:name=".AppPermissionsActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".UnlockSettingsActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
-        <activity android:name=".UnlockActivity" android:exported="false" android:excludeFromRecents="true" android:taskAffinity="${applicationId}.unlock" />
+        <activity android:name=".UnlockActivity" android:exported="false" android:excludeFromRecents="true" android:enableOnBackInvokedCallback="true" tools:targetApi="33" android:taskAffinity="${applicationId}.unlock" />
         <service android:name=".BridgeService" android:exported="false" android:stopWithTask="false" android:foregroundServiceType="remoteMessaging|location" />
         <service android:name=".PhoneAccessibilityService" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="true">
             <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>
