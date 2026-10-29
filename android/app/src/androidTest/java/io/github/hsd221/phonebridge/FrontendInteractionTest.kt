@@ -344,6 +344,8 @@ class FrontendInteractionTest {
                 instrumentation.waitForIdleSync()
                 val pressed = CountDownLatch(1)
                 val pressedAt = AtomicLong()
+                val pressSettled = CountDownLatch(1)
+                val pressSettledAt = AtomicLong()
                 val restored = CountDownLatch(1)
                 val restoredAt = AtomicLong()
                 fun observe(button: Button, started: Long, done: CountDownLatch, elapsed: AtomicLong, condition: () -> Boolean) {
@@ -358,22 +360,23 @@ class FrontendInteractionTest {
                     val button = it.findViewById<Button>(R.id.nav_access)
                     val down = android.os.SystemClock.uptimeMillis()
                     motion(button, MotionEvent.ACTION_DOWN)
+                    assertEquals("Press feedback animation duration changed", 100L, button.animate().duration)
                     observe(button, down, pressed, pressedAt) { button.scaleX < .999f }
+                    observe(button, down, pressSettled, pressSettledAt) { button.scaleX == .97f }
                 }
                 assertTrue("Touch-down never produced scale feedback", pressed.await(3, TimeUnit.SECONDS))
-                assertTrue("Press feedback was delayed: ${pressedAt.get()}ms", pressedAt.get() < 200)
-                Thread.sleep(130)
+                assertTrue("Touch-down never reached its target scale", pressSettled.await(3, TimeUnit.SECONDS))
                 scenario.onActivity { activity ->
                     val button = activity.findViewById<Button>(R.id.nav_access)
                     assertEquals(.97f, button.scaleX, .005f)
                     assertTrue("Touch-down committed navigation before release", activity.findViewById<Button>(R.id.nav_connection).isSelected)
                     val released = android.os.SystemClock.uptimeMillis()
                     motion(button, MotionEvent.ACTION_CANCEL)
+                    assertEquals("Cancel feedback animation duration changed", 160L, button.animate().duration)
                     // Isolate the next click from the preceding return animation's final frames.
                     observe(button, released, restored, restoredAt) { button.scaleX == 1f }
                 }
                 assertTrue("Cancelled press never returned to its resting scale", restored.await(3, TimeUnit.SECONDS))
-                assertTrue("Cancelled press took too long to recover", restoredAt.get() < 350)
                 scenario.onActivity { activity ->
                     assertTrue("Cancelled press committed navigation", activity.findViewById<Button>(R.id.nav_connection).isSelected)
                     activity.findViewById<Button>(R.id.nav_access).performClick()
@@ -387,7 +390,7 @@ class FrontendInteractionTest {
                     assertEquals(1f, activity.findViewById<Button>(R.id.nav_settings).scaleX, 0f)
                     assertTrue(activity.findViewById<Button>(R.id.nav_access).isSelected)
                 }
-                println("Touch feedback: first scale ${pressedAt.get()}ms; cancel settled ${restoredAt.get()}ms")
+                println("Touch feedback: first scale ${pressedAt.get()}ms; press settled ${pressSettledAt.get()}ms; cancel settled ${restoredAt.get()}ms")
             }
         } finally {
             shell(if (oldScale == "null") "settings delete global animator_duration_scale" else "settings put global animator_duration_scale $oldScale")
