@@ -21,7 +21,7 @@ class ShizukuSupport(private val context: Context) {
             val granted = running && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
             val uid = if (granted) Shizuku.getUid() else -1
             JSONObject().put("running", running).put("permissionGranted", granted).put("uid", uid)
-                .put("available", granted && uid == 2000).put("enhancement", "explicit_app_launch")
+                .put("available", granted && uid == 2000).put("enhancement", "explicit_app_launch_and_local_unlock")
                 .put("restartRequiredAfterReboot", true)
         } catch (_: Exception) { JSONObject().put("running", false).put("permissionGranted", false).put("available", false) }
     }

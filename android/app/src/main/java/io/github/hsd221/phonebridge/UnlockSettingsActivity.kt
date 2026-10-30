@@ -42,7 +42,7 @@ class UnlockSettingsActivity : Activity() {
         body.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
         ui.addButton(body, "‹ 返回", ButtonKind.QUIET) { finish() }
         ui.heading(body, "本地解锁", "凭据只保存在这台手机，不发送给 Bridge 或 AI。")
-        val access = ui.section(body, "单独授权", "同时需要“操作应用”能力与无障碍服务。暂停操作或暂停全部访问会停止解锁；一键全开不会开启此授权。")
+        val access = ui.section(body, "单独授权", "同时需要“操作应用”能力与无障碍服务。开启 Shizuku 增强后，连接可用时优先使用；未连接则使用无障碍。暂停操作或暂停全部访问会停止解锁；一键全开不会开启此授权。")
         enabled = ui.toggle("允许远程请求解锁", "允许已配对的 AI 唤醒并使用本地配置解锁手机。", R.id.unlock_enabled) { value ->
             save {
                 requireLocalUser()
@@ -96,11 +96,9 @@ class UnlockSettingsActivity : Activity() {
             save {
                 requireLocalUser()
                 val value = UnlockCredential(kind, if (kind == UnlockKind.PATTERN) sequence else field.input.text.toString())
-                // A changed credential always needs an explicit fresh opt-in.
-                prefs.unlockEnabled = false
                 store.save(value)
                 clearInput()
-                Toast.makeText(this, "已加密保存在本机，请按需要开启解锁授权", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "已加密保存在本机", Toast.LENGTH_LONG).show()
             }
         }
         val recovery = ui.section(body, "失败与恢复", "仅识别支持的系统锁屏。输入失败、中断或结果不明后会禁止继续自动输入，请手动解锁并在这里检查配置。重启后的首次解锁需手动完成。")

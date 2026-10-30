@@ -13,6 +13,7 @@
     "test:android": "tsx scripts/android-smoke.ts",
     "test:android:boot": "tsx scripts/android-boot.ts",
     "test:android:unlock": "tsx scripts/android-unlock.ts",
+    "test:android:unlock:shizuku": "tsx scripts/android-unlock-shizuku.ts",
     "start": "node dist/cli.js",
     "dev": "tsx bridge/src/cli.ts"
   },

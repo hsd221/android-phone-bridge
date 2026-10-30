@@ -16,6 +16,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import android.widget.Button
 import android.widget.EditText
+import android.widget.Switch
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -279,9 +280,28 @@ class UnlockTest {
                     assertTrue("Credential draft survived activity recreation", field.text.isEmpty())
                     field.setText(pin.value)
                     activity.findViewById<Button>(R.id.unlock_save).performClick()
+                    assertTrue("Saving a credential turned off the visible unlock permission", activity.findViewById<Switch>(R.id.unlock_enabled).isChecked)
+                    assertTrue("Saved credential remained in the input field", field.text.isEmpty())
+                }
+                scenario.recreate()
+                scenario.onActivity { activity ->
+                    assertTrue("Recreation lost the saved unlock permission", activity.findViewById<Switch>(R.id.unlock_enabled).isChecked)
+                    activity.findViewById<EditText>(R.id.unlock_credential).setText("12")
+                    activity.findViewById<Button>(R.id.unlock_save).performClick()
+                    assertTrue("Invalid credential changed the unlock permission", activity.findViewById<Switch>(R.id.unlock_enabled).isChecked)
                 }
             }
-            assertFalse("Saving a credential kept remote unlock enabled", prefs.unlockEnabled)
+            assertTrue("Saving a credential disabled remote unlock", prefs.unlockEnabled)
+            assertCiphertext(pin)
+            prefs.unlockEnabled = false
+            ActivityScenario.launch(UnlockSettingsActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    activity.findViewById<EditText>(R.id.unlock_credential).setText(pin.value)
+                    activity.findViewById<Button>(R.id.unlock_save).performClick()
+                    assertFalse("Saving a credential granted remote unlock", activity.findViewById<Switch>(R.id.unlock_enabled).isChecked)
+                }
+            }
+            assertFalse("Saving a credential granted remote unlock", prefs.unlockEnabled)
             assertCiphertext(pin)
             prefs.unlockEnabled = true
             store.clear()

@@ -219,8 +219,8 @@ class MainActivity : Activity() {
         permissionRow(background, "battery", "电池优化", R.id.system_battery_status) { openSettings(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
         permissionRow(background, "background", "系统后台运行", R.id.system_background_status) { openAppSettings() }
         permissionRow(background, "autostart", "厂商自启动", R.id.system_autostart_status, last = true) { openAppSettings() }
-        val enhanced = ui.section(this, "SHIZUKU · 可选增强", "基础工具不依赖 Shizuku。仅支持非 Root 模式下的应用启动；重启手机后通常需重新启动 Shizuku。")
-        shizukuToggle = ui.toggle("增强应用启动", "可用时使用 Shizuku 启动已授权应用。", R.id.shizuku_enabled) { saveSettings { prefs.shizukuEnabled = it } }
+        val enhanced = ui.section(this, "SHIZUKU · 可选增强", "支持非 Root 模式下的应用启动与本地解锁；未连接时使用无障碍服务。重启手机后通常需重新启动 Shizuku。")
+        shizukuToggle = ui.toggle("Shizuku 增强", "可用时优先启动已授权应用及执行已单独授权的本地解锁。", R.id.shizuku_enabled) { saveSettings { prefs.shizukuEnabled = it } }
         enhanced.addView(shizukuToggle); ui.divider(enhanced)
         permissionRow(enhanced, "shizuku", "Shizuku", R.id.system_shizuku_status, last = true) {
             runCatching { ShizukuSupport(this@MainActivity).requestPermission() }.onFailure { message(it.message ?: "授权失败") }

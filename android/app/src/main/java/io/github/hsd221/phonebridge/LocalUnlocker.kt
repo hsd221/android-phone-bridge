@@ -1,6 +1,7 @@
 package io.github.hsd221.phonebridge
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
 import android.app.KeyguardManager
 import android.content.Context
@@ -42,6 +43,8 @@ class LocalUnlocker internal constructor(
 
     suspend fun unlock(ensure: () -> Unit): JSONObject {
         var activity: UnlockActivity? = null
+        var input: LocalCredentialInput? = null
+        var accessibilityInfo: Pair<PhoneAccessibilityService, Int>? = null
         fun checkAccess() { ensure(); prefs.policy().requireTool("phone_unlock"); activity?.ensureNotCancelled() }
         checkAccess()
         UnlockDiagnostics.begin()
@@ -56,13 +59,16 @@ class LocalUnlocker internal constructor(
             }
             val accessibility = PhoneAccessibilityService.instance
                 ?: throw ToolFailure("ACCESSIBILITY_UNAVAILABLE", "请在系统设置中启用手机工具桥无障碍服务")
+            accessibilityInfo = accessibility to accessibility.serviceInfo.flags
+            accessibility.serviceInfo = accessibility.serviceInfo.apply {
+                flags = flags or AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+            }
             val credential: UnlockCredential
-            val root: AccessibilityNodeInfo
             if (context.getSystemService(PowerManager::class.java).isInteractive && bouncerPresent(accessibility)) {
                 // Opening a show-when-locked activity can hide an existing bouncer
                 // and clear a user's partial entry. Do not disturb that surface.
                 credential = store.read() ?: throw ToolFailure("USER_UNLOCK_REQUIRED", "请在手机上完成当前系统解锁")
-                root = systemRoot(accessibility, allowInputMethod = credential.kind == UnlockKind.PASSWORD) ?: unsupported()
+                val root = systemRoot(accessibility, allowInputMethod = credential.kind == UnlockKind.PASSWORD) ?: unsupported()
                 if (entry(root, credential.kind) == null) unsupported()
                 UnlockDiagnostics.stage(UnlockDiagnostics.Stage.WAITING_FOR_BOUNCER)
                 onReveal(RevealPhase.FOUND_BOUNCER)
@@ -85,25 +91,44 @@ class LocalUnlocker internal constructor(
                 }
                 credential = store.read()
                     ?: throw ToolFailure("USER_UNLOCK_REQUIRED", "请在手机上解锁；自动输入需要在本机配置 PIN、密码或图案，指纹与人脸由系统处理")
-                root = awaitBouncer(accessibility, opened, credential.kind, ::checkAccess) ?: return success("system")
+                awaitBouncer(accessibility, opened, credential.kind, ::checkAccess) ?: return success("system")
             }
             UnlockDiagnostics.stage(UnlockDiagnostics.Stage.PREFLIGHT)
-            val pinSubmission = preflight(root, credential)
+            val prepared = prepareCredentialInput(
+                openPreferred = { if (prefs.shizukuEnabled) ShizukuCredentialInput.open(context, ::checkAccess) else null },
+                credential = credential,
+                ensure = ::checkAccess,
+                // A disconnected preparation may have taken time. Always acquire
+                // a fresh system surface before the accessibility fallback.
+                fallbackPreflight = {
+                    val fresh = systemRoot(accessibility, credential.kind == UnlockKind.PASSWORD) ?: unsupported()
+                    preflight(fresh, credential)
+                },
+            )
+            input = prepared.input
+            val pinSubmission = prepared.submission
             checkAccess()
             store.beginAttempt()
             attempted = true
             UnlockDiagnostics.enteringCredential()
-            when (credential.kind) {
-                UnlockKind.PIN -> enterPin(accessibility, credential.value, checkNotNull(pinSubmission), ::checkAccess)
-                UnlockKind.PASSWORD -> enterPassword(accessibility, credential.value, ::checkAccess)
-                UnlockKind.PATTERN -> enterPattern(accessibility, credential.value, ::checkAccess)
+            if (input != null) {
+                input.enter(credential, pinSubmission, ensure = {
+                    checkAccess()
+                    if (!prefs.shizukuEnabled) throw ToolFailure("UNLOCK_INTERRUPTED", "Shizuku 增强已关闭，已停止本地输入")
+                }, isUnlocked = { !keyguard.isKeyguardLocked && !keyguard.isDeviceLocked })
+            } else {
+                when (credential.kind) {
+                    UnlockKind.PIN -> enterPin(accessibility, credential.value, checkNotNull(pinSubmission), ::checkAccess)
+                    UnlockKind.PASSWORD -> enterPassword(accessibility, credential.value, ::checkAccess)
+                    UnlockKind.PATTERN -> enterPattern(accessibility, credential.value, ::checkAccess)
+                }
             }
             UnlockDiagnostics.stage(UnlockDiagnostics.Stage.VERIFYING)
             repeat(60) {
                 checkAccess()
                 if (!keyguard.isKeyguardLocked && !keyguard.isDeviceLocked) {
                     store.allowNextAttempt()
-                    return success("local_credential")
+                    return success(if (input == null) "local_credential" else "shizuku")
                 }
                 delay(100)
             }
@@ -118,6 +143,10 @@ class LocalUnlocker internal constructor(
             UnlockDiagnostics.finish("EXECUTION_FAILED")
             throw failure
         } finally {
+            input?.close()
+            accessibilityInfo?.let { (service, flags) ->
+                runCatching { service.serviceInfo = service.serviceInfo.apply { this.flags = flags } }
+            }
             activity?.finishAndRemoveTask()
             PhoneAccessibilityService.instance?.invalidate()
         }
@@ -128,52 +157,11 @@ class LocalUnlocker internal constructor(
         return JSONObject().put("unlocked", true).put("path", path).put("screen", screenState(context))
     }
 
-    private fun systemRoot(accessibility: PhoneAccessibilityService, allowInputMethod: Boolean = false): AccessibilityNodeInfo? {
-        if (!keyguard.isKeyguardLocked || !context.getSystemService(PowerManager::class.java).isInteractive) return null
-        // UnlockActivity wakes the device and, without a local credential, lets
-        // Android dismiss keyguard. It can therefore become rootInActiveWindow;
-        // resolve the actual keyguard from the window list instead of trusting focus.
-        val windows = accessibility.windows.filter { it.displayId == Display.DEFAULT_DISPLAY }
-        val target = windows.firstOrNull { window ->
-            val root = window.root ?: return@firstOrNull false
-            val owner = root.packageName?.toString()
-            owner in keyguardPackages && root.isVisibleToUser && !Rect().also(window::getBoundsInScreen).isEmpty &&
-                UnlockKind.entries.any { entry(root, it) != null }
-        } ?: return null
-        val root = target.root ?: return null
-        val owner = root.packageName?.toString() ?: return null
-        val info = context.packageManager.getApplicationInfo(owner, 0)
-        if (info.flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) == 0) return null
-        val inputBounds = Rect()
-        UnlockKind.entries.mapNotNull { entry(root, it) }.forEach { inputBounds.union(Rect().also(it::getBoundsInScreen)) }
-        if (entry(root, UnlockKind.PIN) != null) {
-            (('0'..'9').map { "key$it" } + "key_enter").mapNotNull { node(root, it) }
-                .forEach { inputBounds.union(Rect().also(it::getBoundsInScreen)) }
-        }
-        if (inputBounds.isEmpty) return null
-        // Navigation/gesture bars may be owned by the launcher and sit above keyguard.
-        // Only windows intersecting the actual credential controls can intercept input;
-        // never whitelist the entire launcher or any other third-party application.
-        if (windows.any { window ->
-                window.layer > target.layer && Rect.intersects(inputBounds, Rect().also(window::getBoundsInScreen)) &&
-                    !(allowInputMethod && window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) &&
-                    window.root?.packageName?.toString() !in keyguardPackages &&
-                    window.root?.packageName?.toString() != context.packageName
-            }) return null
-        return root
-    }
-
-    private fun node(root: AccessibilityNodeInfo, id: String): AccessibilityNodeInfo? {
-        val owner = root.packageName?.toString() ?: return null
-        return root.findAccessibilityNodeInfosByViewId("$owner:id/$id").singleOrNull {
-            it.packageName?.toString() == owner && it.isVisibleToUser && it.isEnabled
-        }
-    }
-    private fun entry(root: AccessibilityNodeInfo, kind: UnlockKind) = node(root, when (kind) {
-        UnlockKind.PIN -> "pinEntry"
-        UnlockKind.PASSWORD -> "passwordEntry"
-        UnlockKind.PATTERN -> "lockPatternView"
-    })
+    private val ui = KeyguardUi(context)
+    private fun systemRoot(accessibility: PhoneAccessibilityService, allowInputMethod: Boolean = false) =
+        ui.systemRoot(accessibility.windows, allowInputMethod)
+    private fun node(root: AccessibilityNodeInfo, id: String) = ui.node(root, id)
+    private fun entry(root: AccessibilityNodeInfo, kind: UnlockKind) = ui.entry(root, kind)
 
     private suspend fun waitForBouncer(accessibility: PhoneAccessibilityService, kind: UnlockKind, timeoutMs: Long, ensure: () -> Unit): AccessibilityNodeInfo? {
         val deadline = SystemClock.elapsedRealtime() + timeoutMs
@@ -283,64 +271,9 @@ class LocalUnlocker internal constructor(
         return bounds
     }
 
-    private fun preflight(root: AccessibilityNodeInfo, credential: UnlockCredential): PinSubmission? {
-        val containerId = when (credential.kind) {
-            UnlockKind.PIN -> "keyguard_pin_view"
-            UnlockKind.PASSWORD -> "keyguard_password_view"
-            UnlockKind.PATTERN -> "keyguard_pattern_view"
-        }
-        if (node(root, containerId) == null) unsupported(UnlockDiagnostics.Reason.CONTAINER_UNAVAILABLE)
-        val field = entry(root, credential.kind) ?: unsupported(UnlockDiagnostics.Reason.ENTRY_UNAVAILABLE)
-        when (credential.kind) {
-            UnlockKind.PIN -> {
-                if (!field.isPassword) unsupported(UnlockDiagnostics.Reason.ENTRY_NOT_PROTECTED)
-                if (!field.text.isNullOrEmpty()) existingInput()
-                if (credential.value.any { node(root, "key$it")?.isClickable != true }) unsupported(UnlockDiagnostics.Reason.DIGIT_CONTROL_UNAVAILABLE)
-                if (node(root, "key_enter")?.isClickable == true) return PinSubmission.EXPLICIT_ENTER
-                val owner = root.packageName?.toString() ?: unsupported()
-                // Do not reinterpret a disabled/ambiguous confirmation control as
-                // auto-confirm. The supported MIUI profile has no Enter control.
-                if (root.findAccessibilityNodeInfosByViewId("$owner:id/key_enter").isNotEmpty()) {
-                    unsupported(UnlockDiagnostics.Reason.CONFIRM_CONTROL_UNAVAILABLE)
-                }
-                val keys = ('0'..'9').map { digit ->
-                    val key = node(root, "key$digit")
-                    PinDigitKey(digit, key?.contentDescription?.toString(), key?.isClickable == true)
-                }
-                val back = node(root, "back_button")
-                val deleteVisible = root.findAccessibilityNodeInfosByViewId("$owner:id/delete_button").any { it.isVisibleToUser }
-                when (PinAutoConfirmPolicy.check(keys, back?.isClickable == true, deleteVisible)) {
-                    PinAutoConfirmCheck.SUPPORTED -> return PinSubmission.AUTO_CONFIRM
-                    PinAutoConfirmCheck.INPUT_PRESENT -> existingInput()
-                    PinAutoConfirmCheck.EMPTY_STATE_UNKNOWN -> {
-                        UnlockDiagnostics.refused(UnlockDiagnostics.Reason.ENTRY_EMPTY_STATE_UNKNOWN)
-                        throw ToolFailure("USER_UNLOCK_REQUIRED", "无法确认 PIN 输入框为空，请在手机上处理")
-                    }
-                    PinAutoConfirmCheck.KEYPAD_UNVERIFIED -> unsupported(UnlockDiagnostics.Reason.AUTO_CONFIRM_UNVERIFIED)
-                }
-            }
-            UnlockKind.PASSWORD -> {
-                if (!field.isPassword) unsupported(UnlockDiagnostics.Reason.ENTRY_NOT_PROTECTED)
-                if (!field.isEditable) unsupported(UnlockDiagnostics.Reason.ENTRY_NOT_EDITABLE)
-                if (!field.text.isNullOrEmpty()) existingInput()
-                if (field.actionList.none { it.id == AccessibilityNodeInfo.ACTION_SET_TEXT } ||
-                    field.actionList.none { it.id == AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id }) unsupported(UnlockDiagnostics.Reason.PASSWORD_ACTION_UNAVAILABLE)
-            }
-            UnlockKind.PATTERN -> {
-                val bounds = Rect().also(field::getBoundsInScreen)
-                if (bounds.width() < 90 || bounds.height() < 90) unsupported(UnlockDiagnostics.Reason.PATTERN_BOUNDS_INVALID)
-            }
-        }
-        return null
-    }
-    private fun existingInput(): Nothing {
-        UnlockDiagnostics.refused(UnlockDiagnostics.Reason.ENTRY_NOT_EMPTY)
-        throw ToolFailure("USER_UNLOCK_REQUIRED", "锁屏输入框已有内容，请先在手机上处理")
-    }
-    private fun unsupported(reason: UnlockDiagnostics.Reason = UnlockDiagnostics.Reason.UNRECOGNIZED): Nothing {
-        UnlockDiagnostics.refused(reason)
-        throw ToolFailure("UNLOCK_UNSUPPORTED", "此系统锁屏暂不支持本地自动输入，请在手机上手动解锁")
-    }
+    private fun preflight(root: AccessibilityNodeInfo, credential: UnlockCredential) =
+        ui.preflight(root, credential.kind, credential.value.toSet())
+    private fun unsupported(reason: UnlockDiagnostics.Reason = UnlockDiagnostics.Reason.UNRECOGNIZED): Nothing = ui.unsupported(reason)
 
     private fun currentRoot(accessibility: PhoneAccessibilityService, ensure: () -> Unit, allowInputMethod: Boolean = false): AccessibilityNodeInfo {
         ensure()

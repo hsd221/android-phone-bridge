@@ -10,8 +10,8 @@ internal suspend fun enterPinOnce(
     submission: PinSubmission,
     ensure: () -> Unit,
     isUnlocked: () -> Boolean,
-    clickDigit: (Char) -> Unit,
-    confirm: () -> Unit,
+    clickDigit: suspend (Char) -> Unit,
+    confirm: suspend () -> Unit,
 ) {
     for (digit in value) {
         ensure()
