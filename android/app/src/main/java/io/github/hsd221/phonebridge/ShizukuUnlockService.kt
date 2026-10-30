@@ -91,9 +91,7 @@ class ShizukuUnlockService(private val context: Context) : ILocalKeyguard.Stub()
         if (first) {
             if (ui.preflight(root, UnlockKind.PIN) != submission) return@guarded ShellUnlockResult.INTERRUPTED
         } else if (submission == PinSubmission.AUTO_CONFIRM) {
-            val owner = root.packageName?.toString() ?: return@guarded ShellUnlockResult.INTERRUPTED
-            val backVisible = root.findAccessibilityNodeInfosByViewId("$owner:id/back_button").any { it.isVisibleToUser }
-            if (!PinAutoConfirmPolicy.canContinue(backVisible, ui.node(root, "delete_button")?.isClickable == true)) {
+            if (!PinAutoConfirmPolicy.canContinue(ui.pinEmptyControls(root), ui.node(root, "delete_button")?.isClickable == true)) {
                 return@guarded ShellUnlockResult.INTERRUPTED
             }
         }

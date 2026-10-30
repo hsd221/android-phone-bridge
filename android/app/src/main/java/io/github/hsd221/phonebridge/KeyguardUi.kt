@@ -60,6 +60,15 @@ internal class KeyguardUi(private val context: Context) {
         UnlockKind.PATTERN -> "lockPatternView"
     })
 
+    fun pinEmptyControls(root: AccessibilityNodeInfo): List<PinEmptyControl> {
+        val owner = root.packageName?.toString() ?: return emptyList()
+        return PinAutoConfirmPolicy.emptyControlIds.flatMap { id ->
+            root.findAccessibilityNodeInfosByViewId("$owner:id/$id")
+                .filter { it.packageName?.toString() == owner }
+                .map { PinEmptyControl(id, it.isVisibleToUser, it.isEnabled, it.isClickable) }
+        }
+    }
+
     fun preflight(root: AccessibilityNodeInfo, kind: UnlockKind, pinDigits: Set<Char> = ('0'..'9').toSet()): PinSubmission? {
         val containerId = when (kind) {
             UnlockKind.PIN -> "keyguard_pin_view"
@@ -84,21 +93,17 @@ internal class KeyguardUi(private val context: Context) {
                     val key = node(root, "key$digit")
                     PinDigitKey(digit, key?.contentDescription?.toString(), key?.isClickable == true)
                 }
-                val back = node(root, "back_button")
+                val emptyControls = pinEmptyControls(root)
                 val deleteVisible = root.findAccessibilityNodeInfosByViewId("$owner:id/delete_button").any { it.isVisibleToUser }
-                when (PinAutoConfirmPolicy.check(keys, back?.isClickable == true, deleteVisible)) {
+                when (PinAutoConfirmPolicy.check(keys, emptyControls, deleteVisible)) {
                     PinAutoConfirmCheck.SUPPORTED -> return PinSubmission.AUTO_CONFIRM
                     PinAutoConfirmCheck.INPUT_PRESENT -> existingInput()
                     PinAutoConfirmCheck.EMPTY_STATE_UNKNOWN -> {
-                        val candidates = root.findAccessibilityNodeInfosByViewId("$owner:id/back_button")
-                            .filter { it.packageName?.toString() == owner }
-                        val visible = candidates.filter { it.isVisibleToUser }
-                        val enabled = visible.filter { it.isEnabled }
-                        UnlockDiagnostics.refused(when {
-                            candidates.isEmpty() -> UnlockDiagnostics.Reason.BACK_CONTROL_MISSING
-                            visible.isEmpty() -> UnlockDiagnostics.Reason.BACK_CONTROL_HIDDEN
-                            enabled.isEmpty() -> UnlockDiagnostics.Reason.BACK_CONTROL_DISABLED
-                            enabled.size > 1 -> UnlockDiagnostics.Reason.BACK_CONTROL_AMBIGUOUS
+                        UnlockDiagnostics.refused(when (PinAutoConfirmPolicy.emptyControlCheck(emptyControls)) {
+                            PinEmptyControlCheck.MISSING -> UnlockDiagnostics.Reason.BACK_CONTROL_MISSING
+                            PinEmptyControlCheck.HIDDEN -> UnlockDiagnostics.Reason.BACK_CONTROL_HIDDEN
+                            PinEmptyControlCheck.DISABLED -> UnlockDiagnostics.Reason.BACK_CONTROL_DISABLED
+                            PinEmptyControlCheck.AMBIGUOUS -> UnlockDiagnostics.Reason.BACK_CONTROL_AMBIGUOUS
                             else -> UnlockDiagnostics.Reason.BACK_CONTROL_NOT_ACTIONABLE
                         })
                         throw ToolFailure("USER_UNLOCK_REQUIRED", "无法确认 PIN 输入框为空，请在手机上处理")

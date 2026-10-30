@@ -295,10 +295,8 @@ class LocalUnlocker internal constructor(
                             throw ToolFailure("UNLOCK_INTERRUPTED", "系统锁屏状态已改变，已停止本地输入")
                         }
                     } else {
-                        val owner = root.packageName?.toString() ?: unsupported()
-                        val backVisible = root.findAccessibilityNodeInfosByViewId("$owner:id/back_button").any { it.isVisibleToUser }
                         val deleteActionable = node(root, "delete_button")?.isClickable == true
-                        if (!PinAutoConfirmPolicy.canContinue(backVisible, deleteActionable)) {
+                        if (!PinAutoConfirmPolicy.canContinue(ui.pinEmptyControls(root), deleteActionable)) {
                             throw ToolFailure("UNLOCK_INTERRUPTED", "系统锁屏状态已改变，已停止本地输入")
                         }
                     }

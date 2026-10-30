@@ -1,6 +1,6 @@
 # 测试与设备验收记录
 
-> **记录时间**：2026-10-27 至 2026-10-29
+> **记录时间**：2026-10-27 至 2026-10-31
 > **注意**：本地模拟器或 CI 测试全绿代表代码逻辑与协议闭环符合预期，但不能直接推断为所有实体手机（尤其是不同厂商深度定制的 Android ROM）均已完美兼容。实机兼容性需单独验证并记录。
 
 ---
@@ -170,6 +170,14 @@ npm run test:android:unlock:shizuku -- emulator-5554
 JVM 路由测试另行检查连接和预检阶段不可用时只回退一次，先关闭旧会话再核验新窗口；安全拒绝、暂停、取消和非连接错误不触发回退。原有 `UnlockTest` 检查保存有效或无效凭据、重建设置页后保留开启状态，关闭状态下保存也不会擅自开启授权。原无障碍、覆盖窗口、失败 latch 与暂停回归继续由既有两套解锁测试运行。
 
 上述测试覆盖标准 AOSP 与真实 Shizuku 传输，不能证明 Redmi K70 / HyperOS 3.0.307 的布局兼容性；新包的该设备成功路径仍需单独真机验证。
+
+## 十二、PIN 空态控件标识兼容
+
+pre.5 在 Redmi K70 / HyperOS 3.0.307 上的一次授权测试返回 `USER_UNLOCK_REQUIRED`、`reason=back_control_missing`、`credentialAttempted=false`。屏幕被唤醒但双锁保持锁定，未开始输入凭据。该结果证明在所读取的系统窗口中未查到旧 `back_button` 标识，不能证明屏幕上没有返回按钮。Shizuku 当时连接可用，但失败诊断没有传输路径字段，不能据此断言实际预检由 Shizuku UserService 完成。
+
+后续对公开系统实现的只读核对发现：较新的 MIUI [`KeyguardPinViewController`](https://github.com/ymdzq/k60_statusbar_lyric/blob/535d7a3b2c61ced49f76b6da555676570fd46443/MiuiSystemUI_decompile_xml/smali/classes/com/android/keyguard/KeyguardPinViewController.smali) 将其 Back 控件绑定到 `cancel_button`，输入为空时显示它并隐藏 Delete，输入非空时反转。旧版使用 `back_button` 的契约继续保留。这份公开实现来自另一机型，不能代替目标 ROM 的实测证据。
+
+布局模型与单次序列回归覆盖两个准确标识的正常空态、已有输入、控件缺失或不可用、重复或混合标识歧义、未知标识，以及系统在输入中途清空后停止余下数字。正式适配器仍从已核验系统窗口中查询同 owner 节点，两条输入路径使用同一策略；测试不伪造系统应用归属，也不删除空输入证明。AOSP 的显式 Enter 键盘不能充当这些 MIUI 标识的真机兼容证明。实体新版本结果须单独记录。
 
 需要重新采集时，在专用、未配对的模拟器上单独执行：
 

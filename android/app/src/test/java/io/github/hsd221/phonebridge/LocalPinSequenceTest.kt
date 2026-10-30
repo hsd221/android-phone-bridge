@@ -15,6 +15,8 @@ import org.junit.Test
 
 /** Only synthetic digits and action records; system-window guards remain in the Android adapter. */
 class LocalPinSequenceTest {
+    private val reviewedIds = listOf("back_button", "cancel_button")
+
     @OptIn(InternalCoroutinesApi::class)
     private class ImmediateClock(private val afterDelay: (Long) -> Unit = {}) : CoroutineDispatcher(), Delay {
         override fun dispatch(context: CoroutineContext, block: Runnable) = block.run()
@@ -25,79 +27,138 @@ class LocalPinSequenceTest {
     }
 
     /** Synthetic public-profile adapter; it cannot replace Android system/window validation. */
-    private class ReviewedProfile {
+    private class ReviewedProfile(emptyControlId: String) {
         val digits = mutableListOf<Char>()
-        var backVisible = true
+        val requestedDigits = mutableListOf<Char>()
+        var emptyControls = listOf(PinEmptyControl(emptyControlId, visible = true, enabled = true, actionable = true))
+        var deleteVisible = false
         var deleteActionable = false
         var afterClick: () -> Unit = {}
 
         fun click(digit: Char) {
+            requestedDigits.add(digit)
             val accepted = if (digits.isEmpty()) {
                 val keys = ('0'..'9').map { PinDigitKey(it, it.toString(), actionable = true) }
-                PinAutoConfirmPolicy.check(keys, backButtonActionable = backVisible, deleteButtonVisible = deleteActionable) == PinAutoConfirmCheck.SUPPORTED
-            } else PinAutoConfirmPolicy.canContinue(backButtonVisible = backVisible, deleteButtonActionable = deleteActionable)
+                PinAutoConfirmPolicy.check(keys, emptyControls, deleteButtonVisible = deleteVisible) == PinAutoConfirmCheck.SUPPORTED
+            } else PinAutoConfirmPolicy.canContinue(emptyControls, deleteButtonActionable = deleteActionable)
             check(accepted) { "synthetic profile refusal" }
             digits.add(digit)
-            backVisible = false
+            emptyControls = emptyControls.map { it.copy(visible = false) }
+            deleteVisible = true
             deleteActionable = true
             afterClick()
         }
     }
 
     @Test fun reviewedProfileWithContinuousInputCompletesOnlyOneSequence() = runBlocking(ImmediateClock()) {
-        val profile = ReviewedProfile()
-        var confirmations = 0
-        enterPinOnce("120934", PinSubmission.AUTO_CONFIRM, {}, { false }, profile::click, { confirmations++ })
-        assertEquals(listOf('1', '2', '0', '9', '3', '4'), profile.digits)
-        assertEquals(0, confirmations)
+        for (id in reviewedIds) {
+            val profile = ReviewedProfile(id)
+            var confirmations = 0
+            enterPinOnce("120934", PinSubmission.AUTO_CONFIRM, {}, { false }, profile::click, { confirmations++ })
+            assertEquals(listOf('1', '2', '0', '9', '3', '4'), profile.digits)
+            assertEquals(profile.digits, profile.requestedDigits)
+            assertEquals(0, confirmations)
+        }
     }
 
-    @Test fun automaticFailureAndResetAtAShorterPrefixStopsTheRemainingConfiguredDigits() {
-        val profile = ReviewedProfile().apply {
-            afterClick = {
-                if (digits.size == 4) { backVisible = true; deleteActionable = false }
+    @Test fun resetAtEveryShorterPrefixStopsRemainingDigitsForBackAndCancelProfiles() {
+        val syntheticSequence = "120934"
+        for (id in reviewedIds) for (prefix in 1 until syntheticSequence.length) {
+            val profile = ReviewedProfile(id).apply {
+                afterClick = {
+                    if (digits.size == prefix) {
+                        emptyControls = emptyControls.map { it.copy(visible = true) }
+                        deleteVisible = false
+                        deleteActionable = false
+                    }
+                }
+            }
+            assertProfileRefusesOnce(profile, syntheticSequence.take(prefix).toList(), syntheticSequence.take(prefix + 1).toList())
+        }
+    }
+
+    @Test fun missingDeleteOrConflictingStateAfterPartialInputStopsImmediately() {
+        for (id in reviewedIds) for (resetVisible in listOf(false, true)) {
+            val profile = ReviewedProfile(id).apply {
+                afterClick = {
+                    if (digits.size == 2) {
+                        emptyControls = emptyControls.map { it.copy(visible = resetVisible) }
+                        deleteActionable = resetVisible
+                    }
+                }
+            }
+            assertProfileRefusesOnce(profile, listOf('1', '2'), listOf('1', '2', '0'))
+        }
+    }
+
+    @Test fun eitherKnownEmptyAliasReappearingStopsEvenWithActionableDelete() {
+        for (initialId in reviewedIds) for (reappearingId in reviewedIds) {
+            val control = PinEmptyControl(reappearingId, visible = true, enabled = true, actionable = true)
+            for (reappearing in listOf(control, control.copy(enabled = false), control.copy(actionable = false))) {
+                val profile = ReviewedProfile(initialId).apply {
+                    afterClick = {
+                        if (digits.size == 2) emptyControls = listOf(reappearing)
+                    }
+                }
+                assertProfileRefusesOnce(profile, listOf('1', '2'), listOf('1', '2', '0'))
             }
         }
+    }
+
+    @Test fun mixedAliasAmbiguityAfterPartialInputStopsWithoutReplaying() {
+        for (id in reviewedIds) {
+            val profile = ReviewedProfile(id).apply {
+                afterClick = {
+                    if (digits.size == 2) emptyControls = listOf(
+                        PinEmptyControl("back_button", visible = true, enabled = true, actionable = true),
+                        PinEmptyControl("cancel_button", visible = true, enabled = true, actionable = true),
+                    )
+                }
+            }
+            assertProfileRefusesOnce(profile, listOf('1', '2'), listOf('1', '2', '0'))
+        }
+    }
+
+    @Test fun changedEmptyStateBeforeTheFirstClickRefusesWithoutInput() {
+        for (id in reviewedIds) {
+            val known = PinEmptyControl(id, visible = true, enabled = true, actionable = true)
+            val controls = listOf(
+                emptyList(),
+                listOf(known.copy(visible = false)),
+                listOf(known.copy(enabled = false)),
+                listOf(known.copy(actionable = false)),
+                listOf(known, known),
+                listOf(known, PinEmptyControl(if (id == "back_button") "cancel_button" else "back_button", true, true, true)),
+                listOf(PinEmptyControl("unknown_button", true, true, true)),
+            )
+            for (invalid in controls) {
+                val profile = ReviewedProfile(id).apply { emptyControls = invalid }
+                assertProfileRefusesOnce(profile, emptyList(), listOf('1'))
+            }
+        }
+    }
+
+    @Test fun existingInputOnBackOrCancelProfileNeverAppendsAnyDigit() {
+        for (id in reviewedIds) for (emptyVisible in listOf(false, true)) {
+            val profile = ReviewedProfile(id).apply {
+                emptyControls = emptyControls.map { it.copy(visible = emptyVisible) }
+                deleteVisible = true
+                deleteActionable = true
+            }
+            assertProfileRefusesOnce(profile, emptyList(), listOf('1'))
+        }
+    }
+
+    private fun assertProfileRefusesOnce(profile: ReviewedProfile, accepted: List<Char>, requested: List<Char>) {
         var confirmations = 0
         assertThrows(IllegalStateException::class.java) {
             runBlocking(ImmediateClock()) {
                 enterPinOnce("120934", PinSubmission.AUTO_CONFIRM, {}, { false }, profile::click, { confirmations++ })
             }
         }
-        assertEquals(listOf('1', '2', '0', '9'), profile.digits)
+        assertEquals(accepted, profile.digits)
+        assertEquals("A refused action was replayed or remaining input continued", requested, profile.requestedDigits)
         assertEquals(0, confirmations)
-    }
-
-    @Test fun missingDeleteOrConflictingStateAfterPartialInputStopsImmediately() {
-        for ((back, delete) in listOf(false to false, true to true)) {
-            val profile = ReviewedProfile().apply {
-                afterClick = {
-                    if (digits.size == 2) { backVisible = back; deleteActionable = delete }
-                }
-            }
-            var confirmations = 0
-            assertThrows(IllegalStateException::class.java) {
-                runBlocking(ImmediateClock()) {
-                    enterPinOnce("120934", PinSubmission.AUTO_CONFIRM, {}, { false }, profile::click, { confirmations++ })
-                }
-            }
-            assertEquals(listOf('1', '2'), profile.digits)
-            assertEquals(0, confirmations)
-        }
-    }
-
-    @Test fun changedEmptyStateBeforeTheFirstClickRefusesWithoutInput() {
-        for ((back, delete) in listOf(false to false, true to true, false to true)) {
-            val profile = ReviewedProfile().apply { backVisible = back; deleteActionable = delete }
-            var confirmations = 0
-            assertThrows(IllegalStateException::class.java) {
-                runBlocking(ImmediateClock()) {
-                    enterPinOnce("120934", PinSubmission.AUTO_CONFIRM, {}, { false }, profile::click, { confirmations++ })
-                }
-            }
-            assertEquals(emptyList<Char>(), profile.digits)
-            assertEquals(0, confirmations)
-        }
     }
 
     @Test fun autoConfirmEntersOneSequenceAndNeverDispatchesConfirmation() = runBlocking(ImmediateClock()) {
