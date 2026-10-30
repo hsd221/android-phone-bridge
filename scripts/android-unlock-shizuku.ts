@@ -49,7 +49,8 @@ try {
   const status = await adb('shell', 'cat', `/proc/${pid}/status`);
   assert(/^Uid:\s+2000\s+2000\s+2000\s+2000$/m.test(status), 'Shizuku did not start with non-root shell UID 2000');
   const result = await adb('shell', 'am', 'instrument', '-w', '-r', '-e', 'class', 'io.github.hsd221.phonebridge.ShizukuUnlockTest#realShellInputAndDisconnection',
-    '-e', 'shizukuUnlockTest', 'true', 'io.github.hsd221.phonebridge.test/androidx.test.runner.AndroidJUnitRunner');
+    '-e', 'shizukuUnlockTest', 'true', '-e', 'shizukuUnlockServerPid', pid,
+    'io.github.hsd221.phonebridge.test/androidx.test.runner.AndroidJUnitRunner');
   process.stdout.write(result);
   assert(result.includes('OK (1 test)') && !result.includes('FAILURES'), 'Real Shizuku unlock instrumentation failed');
 } finally {

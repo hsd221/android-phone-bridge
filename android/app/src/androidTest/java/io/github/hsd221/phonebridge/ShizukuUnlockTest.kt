@@ -148,6 +148,9 @@ class ShizukuUnlockTest {
         assertNull(prefs.pendingRevocation)
         assertFalse("Refusing an existing secure lock", keyguard.isDeviceSecure)
         authorizeShizuku() // No instrumentation UiAutomation may precede product shell sessions.
+        val serverPid = InstrumentationRegistry.getArguments().getString("shizukuUnlockServerPid").orEmpty()
+        assertTrue("The harness must identify its own Shizuku server", serverPid.matches(Regex("[1-9][0-9]*")))
+        assertEquals("shizuku_server", shell("cat /proc/$serverPid/comm"))
         val previousAccessibility = shell("settings get secure enabled_accessibility_services")
         val previousEnabled = shell("settings get secure accessibility_enabled")
         val previousDisabled = shell("cmd lock_settings get-disabled")
@@ -247,7 +250,10 @@ class ShizukuUnlockTest {
 
             // This server was started by the emulator-only harness. Stop it to
             // validate actual unavailable-service fallback with the enhancement on.
-            Shizuku.exit()
+            // Shizuku.exit() is manager-only. Return this test's remote shell
+            // process before its detached child stops the harness-owned server.
+            assertFalse("Synthetic recovery must unlock before stopping Shizuku", keyguard.isDeviceLocked)
+            shell("(sleep 1; kill $serverPid) </dev/null >/dev/null 2>&1 &")
             eventually("Shizuku server did not stop") { !ShizukuSupport(context).status().optBoolean("running") }
             sleepAndLock()
             val fallback = localUnlock()
