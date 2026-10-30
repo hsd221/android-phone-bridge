@@ -93,17 +93,21 @@ class ShizukuUnlockTest {
     }
     private suspend fun sleepAndLock() {
         shell("input keyevent KEYCODE_SLEEP")
-        eventually("Synthetic device did not lock with screen off") { keyguard.isKeyguardLocked && !power.isInteractive }
+        eventually("Synthetic device did not reach both locked states with screen off") {
+            keyguard.isKeyguardLocked && keyguard.isDeviceLocked && !power.isInteractive
+        }
     }
     private suspend fun revealPin() {
         shell("input keyevent KEYCODE_WAKEUP")
         shell("wm dismiss-keyguard")
         eventually("Synthetic PIN keyboard was not shown") { pinRoot() != null }
     }
-    private fun pinRoot() = PhoneAccessibilityService.instance?.windows.orEmpty().asSequence().mapNotNull { it.root }
-        .firstOrNull { it.packageName?.toString() == "com.android.systemui" &&
-            it.findAccessibilityNodeInfosByViewId("com.android.systemui:id/pinEntry").any { node -> node.isVisibleToUser } }
-    private fun pinField() = pinRoot()?.findAccessibilityNodeInfosByViewId("com.android.systemui:id/pinEntry")?.singleOrNull { it.isVisibleToUser }
+    private fun pinRoot() = if (!keyguard.isKeyguardLocked || !keyguard.isDeviceLocked || !power.isInteractive) null
+        else PhoneAccessibilityService.instance?.windows.orEmpty().asSequence().mapNotNull { it.root }
+            .firstOrNull { it.refresh() && it.packageName?.toString() == "com.android.systemui" &&
+                it.findAccessibilityNodeInfosByViewId("com.android.systemui:id/pinEntry").any { node -> node.refresh() && node.isVisibleToUser } }
+    private fun pinField() = pinRoot()?.findAccessibilityNodeInfosByViewId("com.android.systemui:id/pinEntry")
+        ?.singleOrNull { it.refresh() && it.isVisibleToUser }
     private suspend fun localUnlock(): JSONObject {
         val originalFlags = withContext(Dispatchers.Main) { PhoneAccessibilityService.instance!!.serviceInfo.flags }
         return withContext(Dispatchers.Main) {
@@ -150,7 +154,11 @@ class ShizukuUnlockTest {
         authorizeShizuku() // No instrumentation UiAutomation may precede product shell sessions.
         val serverPid = InstrumentationRegistry.getArguments().getString("shizukuUnlockServerPid").orEmpty()
         assertTrue("The harness must identify its own Shizuku server", serverPid.matches(Regex("[1-9][0-9]*")))
-        assertEquals("shizuku_server", shell("cat /proc/$serverPid/comm"))
+        assertEquals("The harness PID does not match the running server", serverPid, shell("pidof shizuku_server"))
+        // ART can rename the main thread independently of the process argv[0].
+        assertEquals("shizuku_server", shell("cat /proc/$serverPid/cmdline").substringBefore('\u0000'))
+        assertTrue("The harness server must retain non-root shell UID 2000",
+            Regex("""(?m)^Uid:\s+2000\s+2000\s+2000\s+2000$""").containsMatchIn(shell("cat /proc/$serverPid/status")))
         val previousAccessibility = shell("settings get secure enabled_accessibility_services")
         val previousEnabled = shell("settings get secure accessibility_enabled")
         val previousDisabled = shell("cmd lock_settings get-disabled")
@@ -185,8 +193,8 @@ class ShizukuUnlockTest {
                 delay(400)
                 sleepAndLock()
                 val before = LocalUnlocker.screenState(context)
-                assertTrue(before.getBoolean("keyguardLocked"))
-                assertTrue(before.getBoolean("deviceLocked"))
+                assertTrue("Synthetic ${credential.kind} keyguard is not locked", before.getBoolean("keyguardLocked"))
+                assertTrue("Synthetic ${credential.kind} device is not locked", before.getBoolean("deviceLocked"))
                 val result = localUnlock()
                 assertEquals("Expected a real Shizuku path, not accessibility fallback", "shizuku", result.getString("path"))
                 assertTrue(result.getBoolean("unlocked"))
