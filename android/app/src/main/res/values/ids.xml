@@ -1,4 +1,6 @@
 <resources>
+    <item type="id" name="update_prompt_download" />
+    <item type="id" name="update_prompt_later" />
     <item type="id" name="update_current_version" />
     <item type="id" name="update_status" />
     <item type="id" name="check_updates" />

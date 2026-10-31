@@ -28,6 +28,7 @@ import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Test
+import org.junit.Rule
 import org.junit.runner.RunWith
 import java.security.SecureRandom
 import java.util.UUID
@@ -35,6 +36,7 @@ import java.util.UUID
 /** Local-only fallback checks. No credential, node tree, or screenshot goes to Bridge. */
 @RunWith(AndroidJUnit4::class)
 class UnlockBouncerTest {
+    @get:Rule val appUpdates = AppUpdateFixture()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val prefs = BridgePrefs(context)

@@ -24,6 +24,7 @@ import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.Rule
 import org.junit.runner.RunWith
 import java.io.File
 import android.view.accessibility.AccessibilityNodeInfo
@@ -39,6 +40,7 @@ import kotlin.concurrent.thread
 /** Frontend behavior, using a dedicated emulator with no saved connection identity. */
 @RunWith(AndroidJUnit4::class)
 class FrontendInteractionTest {
+    @get:Rule val appUpdates = AppUpdateFixture()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val prefs = BridgePrefs(context)

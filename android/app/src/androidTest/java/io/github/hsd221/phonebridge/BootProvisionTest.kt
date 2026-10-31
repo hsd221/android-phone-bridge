@@ -8,11 +8,13 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.Rule
 import org.junit.runner.RunWith
 
 /** Only provisions a dedicated emulator. The host verifies recovery after instrumentation and reboot. */
 @RunWith(AndroidJUnit4::class)
 class BootProvisionTest {
+    @get:Rule val appUpdates = AppUpdateFixture()
     @Test fun provision() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext

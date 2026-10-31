@@ -35,6 +35,7 @@ import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Test
+import org.junit.Rule
 import org.junit.runner.RunWith
 import java.security.SecureRandom
 import java.util.UUID
@@ -44,6 +45,7 @@ import java.util.concurrent.TimeUnit
 /** Explicitly opt-in, dedicated emulator only; never run on a personal phone. */
 @RunWith(AndroidJUnit4::class)
 class UnlockTest {
+    @get:Rule val appUpdates = AppUpdateFixture()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val arguments = InstrumentationRegistry.getArguments()

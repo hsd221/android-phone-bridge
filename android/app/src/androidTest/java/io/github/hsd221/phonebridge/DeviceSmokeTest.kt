@@ -22,12 +22,14 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.Rule
 import org.junit.runner.RunWith
 import java.util.concurrent.atomic.AtomicInteger
 
 /** Dedicated device/emulator only. Run using scripts/android-smoke.ts, never a personal phone implicitly. */
 @RunWith(AndroidJUnit4::class)
 class DeviceSmokeTest {
+    @get:Rule val appUpdates = AppUpdateFixture()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val arguments = InstrumentationRegistry.getArguments()

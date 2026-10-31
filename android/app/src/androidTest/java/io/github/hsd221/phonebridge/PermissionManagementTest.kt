@@ -23,11 +23,13 @@ import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.Rule
 import org.junit.runner.RunWith
 
 /** Dedicated emulator only: scripts/android-smoke.ts explicitly opts into changing test grants. */
 @RunWith(AndroidJUnit4::class)
 class PermissionManagementTest {
+    @get:Rule val appUpdates = AppUpdateFixture()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val prefs = BridgePrefs(context)

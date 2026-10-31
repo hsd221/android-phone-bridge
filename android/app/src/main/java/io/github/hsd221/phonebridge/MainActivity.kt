@@ -69,6 +69,8 @@ class MainActivity : Activity() {
     private lateinit var updateNotes: TextView
     private lateinit var checkUpdatesButton: Button
     private lateinit var downloadUpdateButton: Button
+    private var updateDialog: AlertDialog? = null
+    private var updateDialogTag: String? = null
     private var resumed = false
     private var notifyAfterPairing = false
     private var pairing = false
@@ -87,7 +89,7 @@ class MainActivity : Activity() {
         allowHttp = savedInstanceState?.getBoolean("allowHttp", false) ?: false
         render()
         pairingRequest.changed = ::pairingChanged
-        updateCheckRequest.changed = ::renderUpdateStatus
+        updateCheckRequest.changed = ::updatesChanged
         pairingChanged()
     }
     private data class RetainedRequests(val pairing: PairingRequest, val updates: UpdateCheckRequest)
@@ -98,10 +100,14 @@ class MainActivity : Activity() {
         if (prefs.identity != null || prefs.pendingRevocation != null) BridgeService.start(this)
         refresh?.cancel()
         refresh = scope.launch { while (isActive) { updateStatus(); delay(1000) } }
+        checkForUpdates((application as BridgeApplication).foregroundGeneration)
+        showUpdatePrompt()
     }
     override fun onPause() { resumed = false; BridgeService.activityVisible = false; refresh?.cancel(); super.onPause() }
+    override fun onStop() { updateDialog?.dismiss(); super.onStop() }
     override fun onDestroy() {
         pairingRequest.changed = null; updateCheckRequest.changed = null
+        updateDialog?.setOnDismissListener(null); updateDialog?.dismiss(); updateDialog = null; updateDialogTag = null
         if (!isChangingConfigurations) updateCheckRequest.close()
         scope.cancel(); super.onDestroy()
     }
@@ -263,7 +269,7 @@ class MainActivity : Activity() {
             request.error != null -> request.error
             release != null -> "发现新版本 ${release.tag}"
             request.checked -> "已是最新版本"
-            else -> "手动检查新版本，包含预发布版本。"
+            else -> "打开应用时自动检查，包含预发布版本。"
         }
         updateStatusText.setTextColor(when {
             request.error != null -> ui.warning
@@ -275,6 +281,27 @@ class MainActivity : Activity() {
         downloadUpdateButton.visibility = if (release == null) View.GONE else View.VISIBLE
         updateNotes.text = release?.notes
         updateNotes.visibility = if (release?.notes.isNullOrBlank()) View.GONE else View.VISIBLE
+    }
+    private fun updatesChanged() { renderUpdateStatus(); showUpdatePrompt() }
+    internal fun checkForUpdates(generation: Int) { updateCheckRequest.onForeground(generation) }
+    private fun showUpdatePrompt() {
+        if (!resumed || isFinishing) return
+        val release = updateCheckRequest.pendingPrompt
+        if (updateDialog?.isShowing == true && updateDialogTag == release?.tag) return
+        updateDialog?.dismiss()
+        val available = release ?: return
+        val dialog = AlertDialog.Builder(this).setTitle("发现新版本 ${available.tag}")
+            .setMessage(available.notes.ifBlank { "新版本已发布，可前往下载更新。" })
+            .setNegativeButton("稍后") { _, _ -> updateCheckRequest.dismissPrompt() }
+            .setPositiveButton("前往下载") { _, _ ->
+                updateCheckRequest.dismissPrompt(); openReleaseLink(available.downloadUrl)
+            }
+            .setOnCancelListener { updateCheckRequest.dismissPrompt() }.create()
+        dialog.setOnDismissListener { if (updateDialog === dialog) { updateDialog = null; updateDialogTag = null } }
+        updateDialog = ui.showDialog(dialog)
+        updateDialogTag = available.tag
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).id = R.id.update_prompt_download
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).id = R.id.update_prompt_later
     }
     private fun openReleaseLink(url: String) {
         runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)) }

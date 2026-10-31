@@ -18,6 +18,7 @@ import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Test
+import org.junit.Rule
 import org.junit.runner.RunWith
 import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuRemoteProcess
@@ -28,6 +29,7 @@ import java.util.UUID
 /** Dedicated emulator only. Real shell Binder, system lockscreen and synthetic local credentials. */
 @RunWith(AndroidJUnit4::class)
 class ShizukuUnlockTest {
+    @get:Rule val appUpdates = AppUpdateFixture()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val prefs = BridgePrefs(context)
