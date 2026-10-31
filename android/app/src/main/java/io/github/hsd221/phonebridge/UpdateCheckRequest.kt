@@ -15,6 +15,7 @@ internal class UpdateCheckRequest(
     private val current = AppVersion.parse(currentVersion)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var lastForeground = -1
+    private var promptDismissed = false
     var busy = false; private set
     var checked = false; private set
     var error: String? = null; private set
@@ -25,6 +26,7 @@ internal class UpdateCheckRequest(
     fun onForeground(generation: Int) {
         if (lastForeground == generation) return
         lastForeground = generation
+        promptDismissed = false
         start(automatic = true)
     }
 
@@ -37,7 +39,7 @@ internal class UpdateCheckRequest(
             try {
                 val installed = current ?: throw UpdateCheckException("当前版本无法识别，请查看发布页面。")
                 release = load().takeIf { it.version > installed }
-                if (automatic) pendingPrompt = release
+                if (automatic && !promptDismissed) pendingPrompt = release
                 checked = true
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -49,6 +51,6 @@ internal class UpdateCheckRequest(
         }
     }
 
-    fun dismissPrompt() { pendingPrompt = null }
+    fun dismissPrompt() { promptDismissed = true; pendingPrompt = null }
     fun close() { changed = null; scope.cancel() }
 }

@@ -248,9 +248,10 @@ class AppUpdateUiTest {
                 scenario.onActivity { activity ->
                     assertNull("Automatic checks must wait for a download choice", opened.get())
                     requireNotNull(dialog(activity)).findViewById<Button>(R.id.update_prompt_download).performClick()
-                    assertEquals(update.downloadUrl, opened.get().dataString)
-                    assertTrue(opened.get().hasCategory(Intent.CATEGORY_BROWSABLE))
                 }
+                eventually("The update choice did not open its download intent") { opened.get() != null }
+                assertEquals(update.downloadUrl, opened.get().dataString)
+                assertTrue(opened.get().hasCategory(Intent.CATEGORY_BROWSABLE))
             }
         } finally { instrumentation.removeMonitor(monitor) }
     }
@@ -317,11 +318,16 @@ class AppUpdateUiTest {
                 assertTrue("The known update was lost when a new request started", prompt.isShowing)
                 prompt.findViewById<Button>(R.id.update_prompt_later).performClick()
             }
-            second.complete(AppUpdateFixture.currentRelease())
+            instrumentation.waitForIdleSync()
+            second.complete(release())
             eventually("Second foreground check did not finish") {
                 var done = false
                 scenario.onActivity { done = !request.busy }
                 done
+            }
+            scenario.onActivity { activity ->
+                assertNull("Choosing later was undone by the already-running check", request.pendingPrompt)
+                assertNull("The same opening prompted again after choosing later", dialog(activity))
             }
         }
     }
