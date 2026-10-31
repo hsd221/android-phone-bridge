@@ -64,6 +64,11 @@ class MainActivity : Activity() {
     private var draftAddress = ""
     private var allowHttp = false
     private lateinit var pairingRequest: PairingRequest
+    private lateinit var updateCheckRequest: UpdateCheckRequest
+    private lateinit var updateStatusText: TextView
+    private lateinit var updateNotes: TextView
+    private lateinit var checkUpdatesButton: Button
+    private lateinit var downloadUpdateButton: Button
     private var resumed = false
     private var notifyAfterPairing = false
     private var pairing = false
@@ -73,16 +78,20 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = BridgePrefs(this); ui = BridgeUi(this)
-        pairingRequest = lastNonConfigurationInstance as? PairingRequest ?: PairingRequest(applicationContext)
+        val retained = lastNonConfigurationInstance as? RetainedRequests
+        pairingRequest = retained?.pairing ?: PairingRequest(applicationContext)
+        updateCheckRequest = retained?.updates ?: UpdateCheckRequest()
         pairing = pairingRequest.busy
         tab = savedInstanceState?.getInt("tab", 0) ?: 0
         draftAddress = savedInstanceState?.getString("address", "") ?: ""
         allowHttp = savedInstanceState?.getBoolean("allowHttp", false) ?: false
         render()
         pairingRequest.changed = ::pairingChanged
+        updateCheckRequest.changed = ::renderUpdateStatus
         pairingChanged()
     }
-    override fun onRetainNonConfigurationInstance(): Any = pairingRequest
+    private data class RetainedRequests(val pairing: PairingRequest, val updates: UpdateCheckRequest)
+    override fun onRetainNonConfigurationInstance(): Any = RetainedRequests(pairingRequest, updateCheckRequest)
     override fun onResume() {
         super.onResume(); resumed = true; BridgeService.activityVisible = true
         requestNotificationAfterPairing()
@@ -91,7 +100,11 @@ class MainActivity : Activity() {
         refresh = scope.launch { while (isActive) { updateStatus(); delay(1000) } }
     }
     override fun onPause() { resumed = false; BridgeService.activityVisible = false; refresh?.cancel(); super.onPause() }
-    override fun onDestroy() { pairingRequest.changed = null; scope.cancel(); super.onDestroy() }
+    override fun onDestroy() {
+        pairingRequest.changed = null; updateCheckRequest.changed = null
+        if (!isChangingConfigurations) updateCheckRequest.close()
+        scope.cancel(); super.onDestroy()
+    }
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putInt("tab", tab); outState.putString("address", address?.input?.text?.toString() ?: draftAddress)
         outState.putBoolean("allowHttp", allowHttp)
@@ -125,7 +138,7 @@ class MainActivity : Activity() {
             leftMargin = ui.dp(20); rightMargin = ui.dp(20); bottomMargin = ui.dp(14)
         })
         ui.attach(this, root)
-        selectTab(tab); updateStatus(); setPairingBusy(pairing)
+        selectTab(tab); updateStatus(); setPairingBusy(pairing); renderUpdateStatus()
     }
     private fun selectTab(index: Int) {
         tab = index.coerceIn(0, 2)
@@ -202,7 +215,22 @@ class MainActivity : Activity() {
         }.apply { id = R.id.manage_unlock })
     }
     private fun settingsPage() = ui.column().apply {
-        ui.heading(this, "系统设置", "从系统设置返回后，状态自动更新。")
+        ui.heading(this, "设置", "管理系统授权与应用更新。")
+        val updates = ui.section(this, "应用更新")
+        updates.addView(ui.text("当前版本 ${BuildConfig.VERSION_NAME}", 16f, true).apply {
+            id = R.id.update_current_version
+        }, ui.gap(top = 12, bottom = 8))
+        updateStatusText = ui.note(updates, "", ui.secondary).apply {
+            id = R.id.update_status; accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+        }
+        checkUpdatesButton = ui.addButton(updates, "检查更新", viewId = R.id.check_updates) { updateCheckRequest.start() }
+        downloadUpdateButton = ui.addButton(updates, "前往下载", ButtonKind.PRIMARY, R.id.download_update) {
+            updateCheckRequest.release?.let { openReleaseLink(it.downloadUrl) }
+        }
+        updateNotes = ui.note(updates, "").apply { id = R.id.update_notes; visibility = View.GONE }
+        updates.addView(ui.actionRow("查看发布版本", "在浏览器中查看所有版本与下载。") {
+            openReleaseLink(AppUpdates.RELEASES_URL)
+        }.apply { id = R.id.open_releases })
         val essential = ui.section(this, "系统授权", "这里显示 Android 的实际授权。应用内开启能力不会替代系统授权。")
         permissionRow(essential, "accessibility", "无障碍", R.id.system_accessibility_status) { openSettings(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
         permissionRow(essential, "location", "定位权限", R.id.system_location_status) {
@@ -226,6 +254,31 @@ class MainActivity : Activity() {
             runCatching { ShizukuSupport(this@MainActivity).requestPermission() }.onFailure { message(it.message ?: "授权失败") }
         }
         ui.note(this, "手机工具桥 ${BuildConfig.VERSION_NAME} · Android ${Build.VERSION.RELEASE}")
+    }
+    private fun renderUpdateStatus() {
+        val request = updateCheckRequest
+        val release = request.release
+        updateStatusText.text = when {
+            request.busy -> "正在检查更新…"
+            request.error != null -> request.error
+            release != null -> "发现新版本 ${release.tag}"
+            request.checked -> "已是最新版本"
+            else -> "手动检查新版本，包含预发布版本。"
+        }
+        updateStatusText.setTextColor(when {
+            request.error != null -> ui.warning
+            release != null || request.checked -> ui.success
+            else -> ui.secondary
+        })
+        checkUpdatesButton.isEnabled = !request.busy
+        checkUpdatesButton.text = when { request.busy -> "正在检查…"; request.error != null -> "重试检查"; else -> "检查更新" }
+        downloadUpdateButton.visibility = if (release == null) View.GONE else View.VISIBLE
+        updateNotes.text = release?.notes
+        updateNotes.visibility = if (release?.notes.isNullOrBlank()) View.GONE else View.VISIBLE
+    }
+    private fun openReleaseLink(url: String) {
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)) }
+            .onFailure { message("无法打开下载链接，请安装或启用浏览器后重试。") }
     }
     private fun permissionRow(parent: LinearLayout, key: String, label: String, viewId: Int, last: Boolean = false, action: () -> Unit) {
         val row = ui.actionRow(label, "读取状态中…", action)

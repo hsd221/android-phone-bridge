@@ -79,3 +79,5 @@ Anthropic 的 Computer Use 让我们看到了大模型直接与操作系统图�
 构建生成的测试 APK 通过本仓库的 [GitHub Releases](https://github.com/hsd221/android-phone-bridge/releases) 交付。
 
 当前阶段均以 **prerelease**（预发布版本）形式提供，发布包内附带对应的 `SHA256SUMS` 校验文件供核验完整性。
+
+手机端可在“设置 → 应用更新”手动检查新版本，包含预发布版本。发现新版后，点击“前往下载”即可在浏览器中下载对应 APK；也可通过“查看发布版本”打开完整发布列表。

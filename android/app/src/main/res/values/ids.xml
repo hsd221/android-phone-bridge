@@ -1,4 +1,10 @@
 <resources>
+    <item type="id" name="update_current_version" />
+    <item type="id" name="update_status" />
+    <item type="id" name="check_updates" />
+    <item type="id" name="download_update" />
+    <item type="id" name="update_notes" />
+    <item type="id" name="open_releases" />
     <item type="id" name="manage_unlock" />
     <item type="id" name="unlock_enabled" />
     <item type="id" name="unlock_status" />
