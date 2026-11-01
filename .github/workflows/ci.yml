@@ -41,6 +41,7 @@ jobs:
             android/app/build/reports/lint-results-debug.html
   android-emulator:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - api: 35
@@ -77,6 +78,7 @@ jobs:
           api-level: ${{ matrix.api }}
           target: ${{ matrix.target }}
           arch: x86_64
+          disk-size: 4096M
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 2048
           script: |

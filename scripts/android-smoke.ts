@@ -29,6 +29,7 @@ const previousAccessibility = (await adb('shell', 'settings', 'get', 'secure', '
 const previousEnabled = (await adb('shell', 'settings', 'get', 'secure', 'accessibility_enabled')).trim();
 const previousWifi = (await adb('shell', 'settings', 'get', 'global', 'wifi_on')).trim();
 const previousData = (await adb('shell', 'settings', 'get', 'global', 'mobile_data')).trim();
+let smokeFailed = false;
 try {
   const address = await bridge.listen();
   if (!address || typeof address === 'string') throw new Error('No listening address');
@@ -82,15 +83,23 @@ try {
     'io.github.hsd221.phonebridge.test/androidx.test.runner.AndroidJUnitRunner');
   process.stdout.write(result);
   if (!result.includes('OK (1 test)') || result.includes('FAILURES')) process.exitCode = 1;
+} catch (error) {
+  smokeFailed = true;
+  throw error;
 } finally {
-  try {
-    await adb('shell', 'svc', 'wifi', previousWifi === '0' ? 'disable' : 'enable');
-    await adb('shell', 'svc', 'data', previousData === '0' ? 'disable' : 'enable');
-    if (previousAccessibility === 'null' || previousAccessibility === '') await adb('shell', 'settings', 'delete', 'secure', 'enabled_accessibility_services');
-    else await adb('shell', 'settings', 'put', 'secure', 'enabled_accessibility_services', previousAccessibility);
-    await adb('shell', 'settings', 'put', 'secure', 'accessibility_enabled', previousEnabled === 'null' ? '0' : previousEnabled);
-  } finally {
-    await bridge.close();
-    await rm(dir, { recursive: true, force: true });
+  const restored = await Promise.allSettled([
+    adb('shell', 'svc', 'wifi', previousWifi === '0' ? 'disable' : 'enable'),
+    adb('shell', 'svc', 'data', previousData === '0' ? 'disable' : 'enable'),
+    (async () => {
+      if (previousAccessibility === 'null' || previousAccessibility === '') await adb('shell', 'settings', 'delete', 'secure', 'enabled_accessibility_services');
+      else await adb('shell', 'settings', 'put', 'secure', 'enabled_accessibility_services', previousAccessibility);
+      await adb('shell', 'settings', 'put', 'secure', 'accessibility_enabled', previousEnabled === 'null' ? '0' : previousEnabled);
+    })(),
+    (async () => { try { await bridge.close(); } finally { await rm(dir, { recursive: true, force: true }); } })(),
+  ]);
+  const failures = restored.filter((result): result is PromiseRejectedResult => result.status === 'rejected').map(result => result.reason);
+  if (failures.length) {
+    if (!smokeFailed) throw new AggregateError(failures, 'Android smoke cleanup failed');
+    console.error('Android smoke cleanup also failed:', failures);
   }
 }
