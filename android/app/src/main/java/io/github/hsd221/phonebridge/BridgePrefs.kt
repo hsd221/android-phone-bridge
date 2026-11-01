@@ -18,6 +18,7 @@ data class PhoneIdentity(val url: String, val token: String, val deviceId: Strin
 // Authorization changes must be durable before reporting success to the user.
 @SuppressLint("ApplySharedPref")
 class BridgePrefs(private val context: Context) {
+    companion object { const val LIVE_UPDATES_ENABLED = "liveUpdatesEnabled" }
     val preferences = context.getSharedPreferences("bridge", Context.MODE_PRIVATE)
     private val vault = IdentityVault()
     val deviceId: String get() = preferences.getString("deviceId", null) ?: UUID.randomUUID().toString().also {
@@ -35,6 +36,9 @@ class BridgePrefs(private val context: Context) {
     var shizukuEnabled: Boolean
         get() = preferences.getBoolean("shizukuEnabled", false)
         set(value) { setFlag("shizukuEnabled", value) }
+    var liveUpdatesEnabled: Boolean
+        get() = preferences.getBoolean(LIVE_UPDATES_ENABLED, false)
+        set(value) { setFlag(LIVE_UPDATES_ENABLED, value) }
     var unlockEnabled: Boolean
         get() = preferences.getBoolean("unlockEnabled", false)
         set(value) { setFlag("unlockEnabled", value); if (!value) UnlockDiagnostics.clear() }

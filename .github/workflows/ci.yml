@@ -28,7 +28,7 @@ jobs:
           java-version: 17
       - uses: android-actions/setup-android@v3
         with:
-          packages: platform-tools platforms;android-35 build-tools;35.0.0
+          packages: platform-tools platforms;android-35 platforms;android-36 build-tools;35.0.0
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :demo:assembleDebug
         working-directory: android
@@ -40,6 +40,15 @@ jobs:
             android/demo/build/outputs/apk/debug/*.apk
             android/app/build/reports/lint-results-debug.html
   android-emulator:
+    strategy:
+      matrix:
+        include:
+          - api: 35
+            target: default
+          - api: 36
+            target: google_apis
+          - api: '36.1'
+            target: google_apis
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -53,7 +62,7 @@ jobs:
           java-version: 17
       - uses: android-actions/setup-android@v3
         with:
-          packages: platform-tools platforms;android-35 build-tools;35.0.0
+          packages: platform-tools platforms;android-35 platforms;android-36 build-tools;35.0.0
       - uses: gradle/actions/setup-gradle@v4
       - run: npm ci
       - run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest :demo:assembleDebug
@@ -65,13 +74,15 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
-          target: default
+          api-level: ${{ matrix.api }}
+          target: ${{ matrix.target }}
           arch: x86_64
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 2048
           script: |
             npm run test:android -- emulator-5554
-            npm run test:android:boot -- emulator-5554
-            npm run test:android:unlock -- emulator-5554
-            npm run test:android:unlock:shizuku -- emulator-5554
+            if [ '${{ matrix.api }}' = '35' ]; then
+              npm run test:android:boot -- emulator-5554
+              npm run test:android:unlock -- emulator-5554
+              npm run test:android:unlock:shizuku -- emulator-5554
+            fi

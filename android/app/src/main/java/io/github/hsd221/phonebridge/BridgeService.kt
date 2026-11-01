@@ -2,7 +2,6 @@ package io.github.hsd221.phonebridge
 
 import android.Manifest
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
@@ -55,6 +54,7 @@ class BridgeService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var prefs: BridgePrefs
     private lateinit var tools: PhoneTools
+    private lateinit var callNotifications: ToolCallNotifications
     private var loop: Job? = null
     private var socket: WebSocket? = null
     private var gate: RequestGate? = null
@@ -65,6 +65,10 @@ class BridgeService : Service() {
     private var defaultNetwork: Network? = null
     var locationForeground = false; private set
     private val changes = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == BridgePrefs.LIVE_UPDATES_ENABLED) {
+            callNotifications.refresh()
+            return@OnSharedPreferenceChangeListener
+        }
         epoch.incrementAndGet()
         cancelRequests(getString(R.string.authorization_changed))
         PhoneAccessibilityService.instance?.invalidate()
@@ -90,7 +94,8 @@ class BridgeService : Service() {
     override fun onCreate() {
         super.onCreate()
         prefs = BridgePrefs(this); tools = PhoneTools(this, prefs)
-        getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel("bridge", getString(R.string.notification_channel), NotificationManager.IMPORTANCE_LOW))
+        BridgeNotificationChannels.ensure(this)
+        callNotifications = ToolCallNotifications(this, prefs).also { it.clear() }
         prefs.preferences.registerOnSharedPreferenceChangeListener(changes)
         getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(networkCallback)
     }
@@ -112,6 +117,7 @@ class BridgeService : Service() {
             startForeground(1, notification(), if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING else 0)
         }
         if (prefs.identity == null && prefs.pendingRevocation == null) { stopSelf(); return START_NOT_STICKY }
+        callNotifications.refresh()
         if (loop?.isActive != true) loop = scope.launch { connectionLoop() }
         return START_STICKY
     }
@@ -209,7 +215,8 @@ class BridgeService : Service() {
             sendResult(webSocket, identity, id, result)
         }
         jobs[id] = job
-        job.invokeOnCompletion { jobs.remove(id) }
+        job.invokeOnCompletion { jobs.remove(id); callNotifications.finish(id) }
+        callNotifications.begin(id, tool)
         job.start()
     }
     private fun error(code: String, message: String, unknown: Boolean = false) = JSONObject().put("ok", false)
@@ -223,14 +230,15 @@ class BridgeService : Service() {
         fun pause(action: String, code: Int) = PendingIntent.getService(this, code, Intent(this, BridgeService::class.java).setAction(action), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val policy = prefs.policy()
         val state = when { policy.pausedAll -> getString(R.string.pause_all_status); policy.pausedOperations -> getString(R.string.paused_operations_status, getString(linkStatusResource)); else -> getString(linkStatusResource) }
-        return Notification.Builder(this, "bridge").setSmallIcon(R.drawable.ic_bridge).setContentTitle(getString(R.string.app_name)).setContentText(state)
-            .setContentIntent(open).setOngoing(true).setCategory(Notification.CATEGORY_SERVICE)
+        return Notification.Builder(this, BridgeNotificationChannels.CONNECTION).setSmallIcon(R.drawable.ic_bridge).setContentTitle(getString(R.string.app_name)).setContentText(state)
+            .setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).setCategory(Notification.CATEGORY_SERVICE)
             .addAction(Notification.Action.Builder(null, getString(R.string.pause_operations), pause("pause_operations", 1)).build())
             .addAction(Notification.Action.Builder(null, getString(R.string.pause_all_action), pause("pause_all", 2)).build()).build()
     }
     private fun updateNotification() { getSystemService(NotificationManager::class.java).notify(1, notification()) }
     override fun onDestroy() {
         connected = false; linkStatusResource = R.string.service_stopped
+        callNotifications.clear()
         prefs.preferences.unregisterOnSharedPreferenceChangeListener(changes)
         getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(networkCallback)
         socket?.cancel(); scope.cancel(); super.onDestroy()

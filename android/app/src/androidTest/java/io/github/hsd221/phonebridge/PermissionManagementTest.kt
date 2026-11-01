@@ -189,7 +189,7 @@ class PermissionManagementTest {
         }
     }
 
-    @Test fun systemGrantsRefreshOnReturnAndNotificationChannelIsChecked() {
+    @Test fun systemGrantsRefreshOnReturnAndToolChannelIsIndependentOfConnectionChannel() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity {
                 assertTrue(it.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0)
@@ -211,10 +211,21 @@ class PermissionManagementTest {
                 }
                 refreshed
             }
-            context.getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel("bridge", "Test connection", NotificationManager.IMPORTANCE_NONE))
-            eventually("Disabled connection channel was incorrectly reported as allowed") {
+            val notifications = context.getSystemService(NotificationManager::class.java)
+            notifications.createNotificationChannel(NotificationChannel(BridgeNotificationChannels.CONNECTION,
+                "Test connection", NotificationManager.IMPORTANCE_NONE))
+            assertEquals(NotificationManager.IMPORTANCE_NONE,
+                notifications.getNotificationChannel(BridgeNotificationChannels.CONNECTION).importance)
+            eventually("Hiding the idle connection channel also disabled tool notification status") {
+                var allowed = false
+                scenario.onActivity { allowed = it.findViewById<TextView>(R.id.system_notification_status).text.toString() == context.getString(R.string.permission_allowed) }
+                allowed
+            }
+            notifications.createNotificationChannel(NotificationChannel(BridgeNotificationChannels.TOOL_CALLS,
+                "Test tool calls", NotificationManager.IMPORTANCE_NONE))
+            eventually("Disabled tool channel was incorrectly reported as allowed") {
                 var blocked = false
-                scenario.onActivity { blocked = it.findViewById<TextView>(R.id.system_notification_status).text.contains("连接通知类别已关闭") }
+                scenario.onActivity { blocked = it.findViewById<TextView>(R.id.system_notification_status).text.toString() == context.getString(R.string.notification_channel_disabled) }
                 blocked
             }
             assertEquals(emptySet<Capability>(), prefs.policy().capabilities)

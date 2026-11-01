@@ -1,4 +1,26 @@
 <resources>
+    <string name="call_display_settings">调用状态提示</string>
+    <string name="call_display_detail">仅在工具调用处理中显示任务状态，全部调用结束后自动移除。可单独关闭连接服务通知，让空闲时通知栏保持干净。</string>
+    <string name="live_updates_toggle">实时胶囊</string>
+    <string name="live_updates_toggle_detail">使用 Android 16 标准实时更新接口，默认关闭；系统版本与通知授权满足条件后可开启。</string>
+    <string name="live_updates_system_settings">系统实时更新设置</string>
+    <string name="live_updates_system_settings_detail">允许本应用显示实时更新；实际胶囊样式与展示由系统决定。</string>
+    <string name="connection_notification_settings">隐藏空闲连接通知</string>
+    <string name="connection_notification_visible">点此进入系统设置，仅关闭「手机工具桥连接」类别。请勿关闭整个应用的通知，也不要关闭工具调用状态类别。</string>
+    <string name="connection_notification_hidden">连接通知类别已关闭，空闲时不显示通知卡片；系统后台运行管理入口仍可能显示本应用。</string>
+    <string name="tool_notification_settings">工具调用通知设置</string>
+    <string name="tool_notification_settings_detail">保持此类别开启，以便在调用期间显示普通通知或请求实时胶囊。</string>
+    <string name="connection_channel_description">维持后台连接所需的静默服务通知。可单独关闭此类别，让空闲时通知栏保持干净；请保留工具调用状态类别。</string>
+    <string name="tool_call_channel">工具调用状态</string>
+    <string name="tool_call_channel_description">仅在工具调用处理中显示，全部调用结束后自动移除。</string>
+    <string name="tool_call_running">正在调用 %1$s</string>
+    <plurals name="tool_call_count"><item quantity="other">%1$d 项调用处理中</item></plurals>
+    <string name="tool_call_short">执行中</string>
+    <string name="live_updates_available">条件已满足。开启后仅在工具调用期间请求系统胶囊显示；最终展示由系统决定，通知栏仍保留同一条调用通知。</string>
+    <string name="live_updates_unsupported">需要 Android 16 或更高版本；当前系统只能使用普通调用通知。</string>
+    <string name="live_updates_notifications_disabled">请先允许本应用发送通知，才能启用实时胶囊。</string>
+    <string name="live_updates_channel_disabled">请开启工具调用状态通知类别，并将其重要性设为低或更高。</string>
+    <string name="live_updates_promotion_disabled">系统尚未允许本应用显示实时更新。可查看系统通知设置；若没有相关选项，说明当前系统尚未开放此功能。</string>
     <string name="unlock_pattern_count">已选择 %1$d 个点</string>
     <string name="app_name">手机工具桥</string>
     <string name="accessibility_description">将你授权的应用界面和操作提供给已配对的 Bridge。可随时在手机工具桥中暂停全部访问、暂停操作或解除配对。默认不允许访问任何应用。</string>
@@ -235,7 +257,7 @@
     <string name="background_requires_location">未允许，请先授予定位权限</string>
     <string name="enabled">已开启</string>
     <string name="disabled">已关闭</string>
-    <string name="notification_channel_disabled">应用已允许，连接通知类别已关闭</string>
+    <string name="notification_channel_disabled">应用已允许，工具调用状态类别已关闭</string>
     <string name="battery_exempt">已豁免电池优化</string>
     <string name="battery_not_exempt">未豁免，仍受电池优化</string>
     <string name="system_restricted">受系统限制</string>

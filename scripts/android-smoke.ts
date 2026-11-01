@@ -13,6 +13,13 @@ const enhanced = process.argv[3] === '--shizuku';
 if (process.argv[3] && !enhanced) throw new Error('Unknown smoke option');
 if (!serial || !/^emulator-\d+$/.test(serial)) throw new Error('Explicit emulator serial required: npx tsx scripts/android-smoke.ts emulator-5554. This test changes app permissions and accessibility settings.');
 const adb = async (...args: string[]) => (await execFile('adb', ['-s', serial, ...args], { timeout: 240000, maxBuffer: 1024 * 1024 })).stdout;
+const resetBridge = async () => {
+  await adb('shell', 'pm', 'clear', 'io.github.hsd221.phonebridge');
+  // Legacy UI scenarios assert Chinese copy; make their locale explicit on English system images.
+  if (Number((await adb('shell', 'getprop', 'ro.build.version.sdk')).trim()) >= 33) {
+    await adb('shell', 'cmd', 'locale', 'set-app-locales', 'io.github.hsd221.phonebridge', '--locales', 'zh-CN');
+  }
+};
 const dir = await mkdtemp(join(tmpdir(), 'phone-bridge-device-'));
 const token = randomBytes(32).toString('base64url');
 const config: Config = { host: '127.0.0.1', port: 0, publicUrl: 'http://10.0.2.2:8787', harnessToken: token,
@@ -31,7 +38,7 @@ try {
   await adb('install', '-r', resolve('android/app/build/outputs/apk/debug/app-debug.apk'));
   await adb('install', '-r', resolve('android/demo/build/outputs/apk/debug/demo-debug.apk'));
   await adb('install', '-r', resolve('android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk'));
-  await adb('shell', 'pm', 'clear', 'io.github.hsd221.phonebridge');
+  await resetBridge();
   await adb('shell', 'pm', 'clear', 'io.github.hsd221.phonebridge.demo');
   const permissionUi = await adb('shell', 'am', 'instrument', '-w', '-r', '-e', 'class', 'io.github.hsd221.phonebridge.PermissionManagementTest',
     '-e', 'permissionUiTest', 'true', 'io.github.hsd221.phonebridge.test/androidx.test.runner.AndroidJUnitRunner');
@@ -45,8 +52,23 @@ try {
     '-e', 'permissionUiTest', 'true', 'io.github.hsd221.phonebridge.test/androidx.test.runner.AndroidJUnitRunner');
   process.stdout.write(updateUi);
   if (!updateUi.includes('OK (9 tests)') || updateUi.includes('FAILURES')) throw new Error('App update tests failed');
+  // Notification tests need fresh channels: permission UI deliberately disables the tool channel.
+  await resetBridge();
+  const notificationUi = await adb('shell', 'am', 'instrument', '-w', '-r', '-e', 'class', 'io.github.hsd221.phonebridge.ToolCallNotificationTest',
+    '-e', 'permissionUiTest', 'true', 'io.github.hsd221.phonebridge.test/androidx.test.runner.AndroidJUnitRunner');
+  process.stdout.write(notificationUi);
+  if (!notificationUi.includes('OK (6 tests)') || notificationUi.includes('FAILURES')) throw new Error('Tool call notification tests failed');
+  const notificationSystemUi = await adb('shell', 'am', 'instrument', '-w', '-r', '-e', 'class', 'io.github.hsd221.phonebridge.NotificationSystemUiTest',
+    '-e', 'notificationSystemUiTest', 'true', 'io.github.hsd221.phonebridge.test/androidx.test.runner.AndroidJUnitRunner');
+  process.stdout.write(notificationSystemUi);
+  if (!notificationSystemUi.includes('OK (1 test)') || notificationSystemUi.includes('FAILURES')) throw new Error('System notification channel tests failed');
   // These tests change grants and notification channels; start the MCP smoke flow from clean app state.
-  await adb('shell', 'pm', 'clear', 'io.github.hsd221.phonebridge');
+  await resetBridge();
+  await adb('shell', 'pm', 'revoke', 'io.github.hsd221.phonebridge', 'android.permission.POST_NOTIFICATIONS');
+  const deniedNotifications = await adb('shell', 'am', 'instrument', '-w', '-r', '-e', 'class', 'io.github.hsd221.phonebridge.NotificationPermissionTest',
+    '-e', 'deniedNotificationPermissionTest', 'true', 'io.github.hsd221.phonebridge.test/androidx.test.runner.AndroidJUnitRunner');
+  process.stdout.write(deniedNotifications);
+  if (!deniedNotifications.includes('OK (1 test)') || deniedNotifications.includes('FAILURES')) throw new Error('Denied notification permission tests failed');
   for (const permission of ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'ACCESS_BACKGROUND_LOCATION', 'POST_NOTIFICATIONS']) {
     await adb('shell', 'pm', 'grant', 'io.github.hsd221.phonebridge', `android.permission.${permission}`);
   }

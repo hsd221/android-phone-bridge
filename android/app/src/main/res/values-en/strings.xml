@@ -1,4 +1,29 @@
 <resources>
+    <string name="call_display_settings">Tool call status</string>
+    <string name="call_display_detail">Task status appears only while calls are pending or running and is removed after all calls finish. Disable only the connection category to hide idle notifications.</string>
+    <string name="live_updates_toggle">Live Updates status chip</string>
+    <string name="live_updates_toggle_detail">Uses standard Android 16 Live Updates. Off by default; available when the system version and notification permissions meet the requirements.</string>
+    <string name="live_updates_system_settings">System Live Updates settings</string>
+    <string name="live_updates_system_settings_detail">Allow Live Updates for this app. Android controls the appearance and presentation of status chips.</string>
+    <string name="connection_notification_settings">Hide idle connection notification</string>
+    <string name="connection_notification_visible">Open system settings and turn off only Phone Bridge connection. Keep app notifications and Tool call status enabled.</string>
+    <string name="connection_notification_hidden">The connection category is off; no idle notification card is shown. Android may still list this app in its active apps controls.</string>
+    <string name="tool_notification_settings">Tool call notification settings</string>
+    <string name="tool_notification_settings_detail">Keep this category enabled for regular call notifications or Live Updates requests during calls.</string>
+    <string name="connection_channel_description">Silent foreground service notification for the background connection. Turn off only this category to hide idle notifications; keep Tool call status enabled.</string>
+    <string name="tool_call_channel">Tool call status</string>
+    <string name="tool_call_channel_description">Shown only while tool calls are pending or running. Removed when all calls finish.</string>
+    <string name="tool_call_running">Calling %1$s</string>
+    <plurals name="tool_call_count">
+        <item quantity="one">%1$d call in progress</item>
+        <item quantity="other">%1$d calls in progress</item>
+    </plurals>
+    <string name="tool_call_short">Active</string>
+    <string name="live_updates_available">Ready. Requests a system status chip only during tool calls. Android controls its presentation; the same call notification remains in the notification drawer.</string>
+    <string name="live_updates_unsupported">Requires Android 16 or later. This system uses regular call notifications.</string>
+    <string name="live_updates_notifications_disabled">Allow this app to send notifications before enabling Live Updates.</string>
+    <string name="live_updates_channel_disabled">Enable the Tool call status category and set its importance to Low or higher.</string>
+    <string name="live_updates_promotion_disabled">Live Updates are not allowed for this app. Check system notification settings; if no option exists, this system does not expose the feature yet.</string>
     <string name="app_name">Phone Bridge</string>
     <string name="accessibility_description">Provide the authorized apps’ UI and actions to paired Bridges. Pause all access, pause operations, or unpair at any time in Phone Bridge. Access to every app is denied by default.</string>
     <string name="app_permission_summary">Showing %1$d of %2$d · %3$d selected%4$s</string>
@@ -233,7 +258,7 @@
     <string name="background_requires_location">Not allowed; grant location permission first</string>
     <string name="enabled">Enabled</string>
     <string name="disabled">Disabled</string>
-    <string name="notification_channel_disabled">App allowed; connection notification channel is disabled</string>
+    <string name="notification_channel_disabled">App allowed; Tool call status category is disabled</string>
     <string name="battery_exempt">Exempt from battery optimization</string>
     <string name="battery_not_exempt">Not exempt; battery optimization still applies</string>
     <string name="system_restricted">Restricted by the system</string>

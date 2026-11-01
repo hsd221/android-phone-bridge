@@ -53,6 +53,9 @@ class MainActivity : Activity() {
     private lateinit var pauseAll: ToggleRow
     private lateinit var pauseOperations: ToggleRow
     private lateinit var shizukuToggle: ToggleRow
+    private lateinit var liveUpdatesToggle: ToggleRow
+    private lateinit var liveUpdatesStatus: TextView
+    private lateinit var connectionNotificationRow: ActionRow
     private lateinit var connectionState: TextView
     private lateinit var connectionDetail: TextView
     private lateinit var accessState: TextView
@@ -260,6 +263,28 @@ class MainActivity : Activity() {
     }
     private fun settingsPage() = ui.column().apply {
         ui.heading(this, getString(R.string.nav_settings), getString(R.string.settings_subtitle))
+        BridgeNotificationChannels.ensure(this@MainActivity)
+        val notifications = ui.section(this, getString(R.string.call_display_settings), getString(R.string.call_display_detail))
+        liveUpdatesToggle = ui.toggle(getString(R.string.live_updates_toggle), getString(R.string.live_updates_toggle_detail), R.id.live_updates_enabled) { enabled ->
+            saveSettings {
+                if (!enabled || BridgeNotificationChannels.liveUpdateAvailability(this@MainActivity) == LiveUpdateAvailability.AVAILABLE)
+                    prefs.liveUpdatesEnabled = enabled
+            }
+        }.also { notifications.addView(it) }
+        liveUpdatesStatus = ui.note(notifications, "").apply { id = R.id.live_updates_status }
+        notifications.addView(ui.actionRow(getString(R.string.live_updates_system_settings), getString(R.string.live_updates_system_settings_detail)) {
+            val promotion = if (Build.VERSION.SDK_INT >= 36) Intent(Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, packageName) else null
+            if (promotion?.resolveActivity(packageManager) != null) openSettings(promotion) else openNotificationSettings()
+        }.apply { id = R.id.live_updates_system_settings })
+        ui.divider(notifications)
+        connectionNotificationRow = ui.actionRow(getString(R.string.connection_notification_settings), "") {
+            openNotificationChannelSettings(BridgeNotificationChannels.CONNECTION)
+        }.also { it.id = R.id.connection_notification_settings; notifications.addView(it) }
+        ui.divider(notifications)
+        notifications.addView(ui.actionRow(getString(R.string.tool_notification_settings), getString(R.string.tool_notification_settings_detail)) {
+            openNotificationChannelSettings(BridgeNotificationChannels.TOOL_CALLS)
+        }.apply { id = R.id.tool_notification_settings })
         val updates = ui.section(this, getString(R.string.app_updates))
         updates.addView(ui.text(getString(R.string.current_version, BuildConfig.VERSION_NAME), 16f, true).apply {
             id = R.id.update_current_version
@@ -478,6 +503,13 @@ class MainActivity : Activity() {
         val summary = resources.getQuantityString(R.plurals.app_access_summary_count, apps.size, apps.size, apps.count { it.read }, apps.count { it.operate })
         appSummary.bindDetail(summary)
         shizukuToggle.bind(prefs.shizukuEnabled)
+        val liveUpdates = BridgeNotificationChannels.liveUpdateAvailability(this)
+        liveUpdatesToggle.toggle.isEnabled = liveUpdates == LiveUpdateAvailability.AVAILABLE
+        liveUpdatesToggle.bind(prefs.liveUpdatesEnabled && liveUpdates == LiveUpdateAvailability.AVAILABLE)
+        liveUpdatesStatus.text = getString(liveUpdates.messageResource)
+        val connectionHidden = getSystemService(android.app.NotificationManager::class.java)
+            .getNotificationChannel(BridgeNotificationChannels.CONNECTION)?.importance == android.app.NotificationManager.IMPORTANCE_NONE
+        connectionNotificationRow.bindDetail(getString(if (connectionHidden) R.string.connection_notification_hidden else R.string.connection_notification_visible))
         val systemStates = SystemPermissions.read(this)
         permissionViews.forEach { (key, row) ->
             val permission = systemStates.getValue(key)
@@ -504,6 +536,10 @@ class MainActivity : Activity() {
     }
     private fun openAppSettings() { openSettings(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) }
     private fun openNotificationSettings() { openSettings(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)) }
+    private fun openNotificationChannelSettings(channel: String) {
+        openSettings(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, packageName).putExtra(Settings.EXTRA_CHANNEL_ID, channel))
+    }
     private fun requestMediaPermissions(images: Boolean, videos: Boolean) {
         val permissions = if (Build.VERSION.SDK_INT >= 33) buildList {
             if (images) add(Manifest.permission.READ_MEDIA_IMAGES)

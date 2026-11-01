@@ -30,7 +30,7 @@ object SystemPermissions {
         val notifications = context.getSystemService(NotificationManager::class.java)
         val notificationPermission = Build.VERSION.SDK_INT < 33 || granted(Manifest.permission.POST_NOTIFICATIONS)
         val notificationsEnabled = notificationPermission && notifications.areNotificationsEnabled()
-        val channelEnabled = notifications.getNotificationChannel("bridge")?.importance != NotificationManager.IMPORTANCE_NONE
+        val channelEnabled = notifications.getNotificationChannel(BridgeNotificationChannels.TOOL_CALLS)?.importance != NotificationManager.IMPORTANCE_NONE
         val batteryExempt = context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName)
         val backgroundRestricted = context.getSystemService(ActivityManager::class.java).isBackgroundRestricted
         val shizuku = ShizukuSupport(context).status()

@@ -5,13 +5,13 @@ plugins {
 
 android {
     namespace = "io.github.hsd221.phonebridge"
-    compileSdk = 35
+    compileSdk = 36
     defaultConfig {
         applicationId = "io.github.hsd221.phonebridge"
         minSdk = 30
         targetSdk = 35
-        versionCode = 11
-        versionName = "0.3.0-pre.8"
+        versionCode = 12
+        versionName = "0.3.0-pre.9"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { aidl = true; buildConfig = true }
@@ -24,6 +24,7 @@ android {
 }
 
 dependencies {
+    implementation("androidx.core:core:1.17.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("dev.rikka.shizuku:api:13.1.5")
