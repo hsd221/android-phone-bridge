@@ -27,6 +27,10 @@ try {
     await adb('install', '-r', resolve('android', apk));
   }
   await adb('shell', 'pm', 'clear', 'io.github.hsd221.phonebridge');
+  // Clearing app data resets its locale; legacy bouncer assertions use Chinese copy.
+  if (Number((await adb('shell', 'getprop', 'ro.build.version.sdk')).trim()) >= 33) {
+    await adb('shell', 'cmd', 'locale', 'set-app-locales', 'io.github.hsd221.phonebridge', '--locales', 'zh-CN');
+  }
   await adb('shell', 'pm', 'grant', 'io.github.hsd221.phonebridge', 'android.permission.POST_NOTIFICATIONS');
   const pair = bridge.identities.createPairing();
   // Actual lock credentials are generated and used only inside instrumentation on the
