@@ -67,7 +67,7 @@ internal object AppUpdates {
     // /releases/latest excludes prereleases. Select the highest downloadable version from the list.
     fun latestFromJson(json: String): AppRelease {
         val releases = try { JSONArray(json) } catch (_: Exception) {
-            throw UpdateCheckException("更新信息格式异常，请稍后重试或查看发布页面。")
+            throw UpdateCheckException(text(R.string.err_update_metadata_invalid))
         }
         return (0 until releases.length()).mapNotNull { index ->
             val release = releases.optJSONObject(index) ?: return@mapNotNull null
@@ -88,7 +88,7 @@ internal object AppUpdates {
             val notes = if (release.isNull("body")) "" else release.optString("body").take(4000).trim()
             AppRelease(tag, version, download, notes)
         }.maxByOrNull { it.version }
-            ?: throw UpdateCheckException("暂未找到可下载的版本，请稍后重试或查看发布页面。")
+            ?: throw UpdateCheckException(text(R.string.err_update_download_missing))
     }
 
     suspend fun latest(client: OkHttpClient = defaultClient): AppRelease = suspendCancellableCoroutine { continuation ->
@@ -100,19 +100,19 @@ internal object AppUpdates {
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                val message = if (e is SocketTimeoutException) "连接超时，请检查网络后重试。" else "无法连接 GitHub，请检查网络后重试。"
+                val message = if (e is SocketTimeoutException) text(R.string.err_network_timeout) else text(R.string.err_github_unreachable)
                 continuation.resumeWithException(UpdateCheckException(message))
             }
             override fun onResponse(call: Call, response: Response) {
                 val result = runCatching {
                     response.use {
-                        if (it.code == 403 || it.code == 429) throw UpdateCheckException("暂时无法检查更新，请稍后重试或查看发布页面。")
-                        if (!it.isSuccessful) throw UpdateCheckException("检查更新失败（HTTP ${it.code}），请稍后重试。")
+                        if (it.code == 403 || it.code == 429) throw UpdateCheckException(text(R.string.err_update_rate_limited))
+                        if (!it.isSuccessful) throw UpdateCheckException(text(R.string.err_update_http_status, it.code))
                         latestFromJson(it.body?.string() ?: "")
                     }
                 }
                 result.fold(continuation::resume) { failure ->
-                    continuation.resumeWithException(if (failure is UpdateCheckException) failure else UpdateCheckException("读取更新信息失败，请稍后重试。"))
+                    continuation.resumeWithException(if (failure is UpdateCheckException) failure else UpdateCheckException(text(R.string.err_update_response_unreadable)))
                 }
             }
         })

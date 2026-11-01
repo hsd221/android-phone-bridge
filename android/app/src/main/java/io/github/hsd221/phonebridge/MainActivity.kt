@@ -134,7 +134,7 @@ class MainActivity : Activity() {
             setPadding(ui.dp(6), ui.dp(6), ui.dp(6), ui.dp(6)); background = ui.chrome()
             elevation = ui.dp(8).toFloat()
         }
-        val labels = listOf("连接", "访问", "设置")
+        val labels = listOf(getString(R.string.nav_connection), getString(R.string.nav_access), getString(R.string.nav_settings))
         val ids = listOf(R.id.nav_connection, R.id.nav_access, R.id.nav_settings)
         labels.forEachIndexed { index, label ->
             val button = ui.button(label, ButtonKind.QUIET, ids[index]) { selectTab(index) }
@@ -157,13 +157,13 @@ class MainActivity : Activity() {
             button.textSize = 12f
             button.compoundDrawablePadding = ui.dp(5)
             button.setCompoundDrawablesWithIntrinsicBounds(null, BridgeIconDrawable(BridgeIcon.entries[i], if (i == tab) ui.accent else ui.secondary, ui.dp(22)), null, null)
-            button.stateDescription = if (i == tab) "当前页面" else ""
+            button.stateDescription = if (i == tab) getString(R.string.current_page) else ""
         }
     }
     private fun connectionPage() = ui.column().apply {
-        ui.heading(this, "手机工具桥", "将手机连接到你自己的 AI 工具。")
+        ui.heading(this, getString(R.string.app_name), getString(R.string.app_subtitle))
         val connection = ui.card(this)
-        connection.addView(ui.text("连接状态", 13f, true, ui.secondary))
+        connection.addView(ui.text(getString(R.string.connection_status), 13f, true, ui.secondary))
         connectionState = ui.text("", 28f, true).apply {
             id = R.id.connection_state; accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
@@ -173,39 +173,39 @@ class MainActivity : Activity() {
         val identity = prefs.identity
         if (identity != null) {
             connection.addView(ui.text(identity.url, 14f).apply { setTextIsSelectable(true) }, ui.gap(top = 8, bottom = 8))
-            if (Uri.parse(identity.url).scheme == "http") ui.note(connection, "此连接使用 HTTP 明文，仅适用于可信的本地网络。", ui.warning)
-            ui.addButton(connection, "重新连接", ButtonKind.PRIMARY, R.id.reconnect) { BridgeService.start(this@MainActivity, "reconnect"); updateStatus() }
-            ui.addButton(connection, "解除配对", ButtonKind.DANGER, R.id.unpair) { confirmUnpair() }
+            if (Uri.parse(identity.url).scheme == "http") ui.note(connection, getString(R.string.http_warning), ui.warning)
+            ui.addButton(connection, getString(R.string.reconnect), ButtonKind.PRIMARY, R.id.reconnect) { BridgeService.start(this@MainActivity, "reconnect"); updateStatus() }
+            ui.addButton(connection, getString(R.string.unpair), ButtonKind.DANGER, R.id.unpair) { confirmUnpair() }
         } else pairingCard(connection)
-        val guide = ui.section(this, "连接之后")
-        guide.addView(ui.actionRow("配置访问权限", "选择可读取、可操作的应用与能力。") { selectTab(1) })
+        val guide = ui.section(this, getString(R.string.after_connection))
+        guide.addView(ui.actionRow(getString(R.string.configure_access), getString(R.string.configure_access_detail)) { selectTab(1) })
         ui.divider(guide)
-        guide.addView(ui.actionRow("检查系统授权", "无障碍、定位与后台运行状态。") { selectTab(2) })
-        ui.note(this, "连接由前台服务保持。关闭页面后仍可连接；后台运行受 Android 和厂商设置约束。")
+        guide.addView(ui.actionRow(getString(R.string.check_system_permissions), getString(R.string.check_system_permissions_detail)) { selectTab(2) })
+        ui.note(this, getString(R.string.connection_persistence))
     }
     private fun accessPage() = ui.column().apply {
-        ui.heading(this, "访问控制", "选择开放的范围，随时收回控制。")
-        val controls = ui.section(this, "即时控制", "暂停会取消待执行请求；已交给 Android 或应用的操作可能已经生效。基础状态查询仍可用。")
+        ui.heading(this, getString(R.string.access_control), getString(R.string.access_control_subtitle))
+        val controls = ui.section(this, getString(R.string.live_control), getString(R.string.live_control_detail))
         accessState = ui.text("", 14f, true, ui.accent).apply {
             id = R.id.access_state; setPadding(0, ui.dp(12), 0, ui.dp(4))
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
         controls.addView(accessState)
-        pauseAll = ui.toggle("暂停全部访问", "暂停定位、读屏、截图与操作。", R.id.pause_all) { saveSettings { prefs.setFlag("pausedAll", it) } }
+        pauseAll = ui.toggle(getString(R.string.pause_all), getString(R.string.pause_all_detail), R.id.pause_all) { saveSettings { prefs.setFlag("pausedAll", it) } }
         controls.addView(pauseAll); ui.divider(controls)
-        pauseOperations = ui.toggle("暂停操作", "保留读取设置；全部访问暂停时，读取也不可用。", R.id.pause_operations) { saveSettings { prefs.setFlag("pausedOperations", it) } }
+        pauseOperations = ui.toggle(getString(R.string.pause_operations), getString(R.string.pause_operations_detail), R.id.pause_operations) { saveSettings { prefs.setFlag("pausedOperations", it) } }
         controls.addView(pauseOperations)
-        val apps = ui.section(this, "应用范围", "新应用默认禁止。读取与操作分别配置；本应用的设置始终禁止远程访问。键盘、系统弹窗及覆盖层也需要单独授权。")
-        appSummary = ui.actionRow("应用权限", "") { startActivity(Intent(this@MainActivity, AppPermissionsActivity::class.java)) }.apply { id = R.id.manage_app_permissions }
+        val apps = ui.section(this, getString(R.string.app_scope), getString(R.string.app_scope_detail))
+        appSummary = ui.actionRow(getString(R.string.app_permissions_title), "") { startActivity(Intent(this@MainActivity, AppPermissionsActivity::class.java)) }.apply { id = R.id.manage_app_permissions }
         apps.addView(appSummary)
-        val capabilities = ui.section(this, "能力开关", "能力开关、应用授权和系统权限需要同时满足。通用操作可能触发发送、支付等按钮，请按需要开放。")
+        val capabilities = ui.section(this, getString(R.string.capabilities), getString(R.string.capabilities_detail))
         capabilitySummary = ui.text("", 13f, true, ui.secondary)
         capabilities.addView(capabilitySummary, ui.gap(top = 12, bottom = 4))
         val specs = listOf(
-            Triple(Capability.LOCATION, "当前位置", "按次获取位置，需要系统定位权限。"),
-            Triple(Capability.UI, "读取界面", "读取已授权应用的可见文字与控件。"),
-            Triple(Capability.SCREENSHOT, "屏幕截图", "仅获取系统允许且窗口已授权的截图。"),
-            Triple(Capability.OPERATE, "操作应用", "打开应用、点击、滑动、输入与返回。"),
+            Triple(Capability.LOCATION, getString(R.string.cap_location), getString(R.string.cap_location_detail)),
+            Triple(Capability.UI, getString(R.string.cap_ui), getString(R.string.cap_ui_detail)),
+            Triple(Capability.SCREENSHOT, getString(R.string.cap_screenshot), getString(R.string.cap_screenshot_detail)),
+            Triple(Capability.OPERATE, getString(R.string.cap_operate), getString(R.string.cap_operate_detail)),
         )
         val ids = listOf(R.id.cap_location, R.id.cap_ui, R.id.cap_screenshot, R.id.cap_operate)
         specs.forEachIndexed { i, (capability, title, detail) ->
@@ -213,63 +213,63 @@ class MainActivity : Activity() {
             val row = ui.toggle(title, detail, ids[i]) { saveSettings { prefs.setFlag("cap_${capability.name}", it) } }
             capabilities.addView(row); capabilityRows[capability] = row
         }
-        ui.addButton(capabilities, "开启四项能力", viewId = R.id.capabilities_enable_all) { saveSettings("已开启四项能力；应用和系统授权需分别设置") { prefs.setCapabilities(true) } }
-        ui.addButton(capabilities, "关闭四项能力", ButtonKind.QUIET, R.id.capabilities_disable_all) { saveSettings("已关闭四项能力") { prefs.setCapabilities(false) } }
-        val unlock = ui.section(this, "锁屏解锁", "独立授权，默认关闭。PIN、密码和图案仅在手机本地加密保存；不会发送到 Bridge。")
-        unlock.addView(ui.actionRow("本地解锁设置", "配置解锁方式、授权与失败恢复。") {
+        ui.addButton(capabilities, getString(R.string.enable_all_capabilities), viewId = R.id.capabilities_enable_all) { saveSettings(getString(R.string.enable_all_success)) { prefs.setCapabilities(true) } }
+        ui.addButton(capabilities, getString(R.string.disable_all_capabilities), ButtonKind.QUIET, R.id.capabilities_disable_all) { saveSettings(getString(R.string.disable_all_success)) { prefs.setCapabilities(false) } }
+        val unlock = ui.section(this, getString(R.string.unlock), getString(R.string.unlock_detail))
+        unlock.addView(ui.actionRow(getString(R.string.local_unlock_settings), getString(R.string.local_unlock_settings_detail)) {
             startActivity(Intent(this@MainActivity, UnlockSettingsActivity::class.java))
         }.apply { id = R.id.manage_unlock })
     }
     private fun settingsPage() = ui.column().apply {
-        ui.heading(this, "设置", "管理系统授权与应用更新。")
-        val updates = ui.section(this, "应用更新")
-        updates.addView(ui.text("当前版本 ${BuildConfig.VERSION_NAME}", 16f, true).apply {
+        ui.heading(this, getString(R.string.nav_settings), getString(R.string.settings_subtitle))
+        val updates = ui.section(this, getString(R.string.app_updates))
+        updates.addView(ui.text(getString(R.string.current_version, BuildConfig.VERSION_NAME), 16f, true).apply {
             id = R.id.update_current_version
         }, ui.gap(top = 12, bottom = 8))
         updateStatusText = ui.note(updates, "", ui.secondary).apply {
             id = R.id.update_status; accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
-        checkUpdatesButton = ui.addButton(updates, "检查更新", viewId = R.id.check_updates) { updateCheckRequest.start() }
-        downloadUpdateButton = ui.addButton(updates, "前往下载", ButtonKind.PRIMARY, R.id.download_update) {
+        checkUpdatesButton = ui.addButton(updates, getString(R.string.check_updates), viewId = R.id.check_updates) { updateCheckRequest.start() }
+        downloadUpdateButton = ui.addButton(updates, getString(R.string.download), ButtonKind.PRIMARY, R.id.download_update) {
             updateCheckRequest.release?.let { openReleaseLink(it.downloadUrl) }
         }
         updateNotes = ui.note(updates, "").apply { id = R.id.update_notes; visibility = View.GONE }
-        updates.addView(ui.actionRow("查看发布版本", "在浏览器中查看所有版本与下载。") {
+        updates.addView(ui.actionRow(getString(R.string.view_releases), getString(R.string.view_releases_detail)) {
             openReleaseLink(AppUpdates.RELEASES_URL)
         }.apply { id = R.id.open_releases })
-        val essential = ui.section(this, "系统授权", "这里显示 Android 的实际授权。应用内开启能力不会替代系统授权。")
-        permissionRow(essential, "accessibility", "无障碍", R.id.system_accessibility_status) { openSettings(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
-        permissionRow(essential, "location", "定位权限", R.id.system_location_status) {
+        val essential = ui.section(this, getString(R.string.system_permissions), getString(R.string.system_permissions_detail))
+        permissionRow(essential, "accessibility", getString(R.string.permission_accessibility), R.id.system_accessibility_status) { openSettings(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+        permissionRow(essential, "location", getString(R.string.permission_location), R.id.system_location_status) {
             if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) openAppSettings()
             else requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 10)
         }
-        permissionRow(essential, "backgroundLocation", "后台定位", R.id.system_background_location_status) { openAppSettings() }
-        permissionRow(essential, "locationService", "系统定位开关", R.id.system_location_service_status) { openSettings(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
-        permissionRow(essential, "notifications", "运行通知", R.id.system_notification_status, last = true) {
+        permissionRow(essential, "backgroundLocation", getString(R.string.permission_background_location), R.id.system_background_location_status) { openAppSettings() }
+        permissionRow(essential, "locationService", getString(R.string.permission_location_service), R.id.system_location_service_status) { openSettings(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
+        permissionRow(essential, "notifications", getString(R.string.permission_notifications), R.id.system_notification_status, last = true) {
             if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 11)
             else openNotificationSettings()
         }
-        val background = ui.section(this, "后台运行", "建议允许自启动、后台运行并豁免电池优化。后台定位需在系统中选择“始终允许”。强行停止后需要手动打开应用。")
-        permissionRow(background, "battery", "电池优化", R.id.system_battery_status) { openSettings(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
-        permissionRow(background, "background", "系统后台运行", R.id.system_background_status) { openAppSettings() }
-        permissionRow(background, "autostart", "厂商自启动", R.id.system_autostart_status, last = true) { openAppSettings() }
-        val enhanced = ui.section(this, "SHIZUKU · 可选增强", "支持非 Root 模式下的应用启动与本地解锁；未连接时使用无障碍服务。重启手机后通常需重新启动 Shizuku。")
-        shizukuToggle = ui.toggle("Shizuku 增强", "可用时优先启动已授权应用及执行已单独授权的本地解锁。", R.id.shizuku_enabled) { saveSettings { prefs.shizukuEnabled = it } }
+        val background = ui.section(this, getString(R.string.background_operation), getString(R.string.background_operation_detail))
+        permissionRow(background, "battery", getString(R.string.battery_optimization), R.id.system_battery_status) { openSettings(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
+        permissionRow(background, "background", getString(R.string.system_background), R.id.system_background_status) { openAppSettings() }
+        permissionRow(background, "autostart", getString(R.string.vendor_autostart), R.id.system_autostart_status, last = true) { openAppSettings() }
+        val enhanced = ui.section(this, getString(R.string.shizuku_optional), getString(R.string.shizuku_optional_detail))
+        shizukuToggle = ui.toggle(getString(R.string.shizuku_enhancement), getString(R.string.shizuku_enhancement_detail), R.id.shizuku_enabled) { saveSettings { prefs.shizukuEnabled = it } }
         enhanced.addView(shizukuToggle); ui.divider(enhanced)
         permissionRow(enhanced, "shizuku", "Shizuku", R.id.system_shizuku_status, last = true) {
-            runCatching { ShizukuSupport(this@MainActivity).requestPermission() }.onFailure { message(it.message ?: "授权失败") }
+            runCatching { ShizukuSupport(this@MainActivity).requestPermission() }.onFailure { message(it.message ?: getString(R.string.authorization_failed)) }
         }
-        ui.note(this, "手机工具桥 ${BuildConfig.VERSION_NAME} · Android ${Build.VERSION.RELEASE}")
+        ui.note(this, getString(R.string.app_version_footer, BuildConfig.VERSION_NAME, Build.VERSION.RELEASE))
     }
     private fun renderUpdateStatus() {
         val request = updateCheckRequest
         val release = request.release
         updateStatusText.text = when {
-            request.busy -> "正在检查更新…"
+            request.busy -> getString(R.string.checking_updates)
             request.error != null -> request.error
-            release != null -> "发现新版本 ${release.tag}"
-            request.checked -> "已是最新版本"
-            else -> "打开应用时自动检查，包含预发布版本。"
+            release != null -> getString(R.string.new_version, release.tag)
+            request.checked -> getString(R.string.up_to_date)
+            else -> getString(R.string.automatic_update_note)
         }
         updateStatusText.setTextColor(when {
             request.error != null -> ui.warning
@@ -277,7 +277,7 @@ class MainActivity : Activity() {
             else -> ui.secondary
         })
         checkUpdatesButton.isEnabled = !request.busy
-        checkUpdatesButton.text = when { request.busy -> "正在检查…"; request.error != null -> "重试检查"; else -> "检查更新" }
+        checkUpdatesButton.text = when { request.busy -> getString(R.string.checking); request.error != null -> getString(R.string.retry_check); else -> getString(R.string.check_updates) }
         downloadUpdateButton.visibility = if (release == null) View.GONE else View.VISIBLE
         updateNotes.text = release?.notes
         updateNotes.visibility = if (release?.notes.isNullOrBlank()) View.GONE else View.VISIBLE
@@ -290,10 +290,10 @@ class MainActivity : Activity() {
         if (updateDialog?.isShowing == true && updateDialogTag == release?.tag) return
         updateDialog?.dismiss()
         val available = release ?: return
-        val dialog = AlertDialog.Builder(this).setTitle("发现新版本 ${available.tag}")
-            .setMessage(available.notes.ifBlank { "新版本已发布，可前往下载更新。" })
-            .setNegativeButton("稍后") { _, _ -> updateCheckRequest.dismissPrompt() }
-            .setPositiveButton("前往下载") { _, _ ->
+        val dialog = AlertDialog.Builder(this).setTitle(getString(R.string.new_version, available.tag))
+            .setMessage(available.notes.ifBlank { getString(R.string.new_version_published) })
+            .setNegativeButton(getString(R.string.later)) { _, _ -> updateCheckRequest.dismissPrompt() }
+            .setPositiveButton(getString(R.string.download)) { _, _ ->
                 updateCheckRequest.dismissPrompt(); openReleaseLink(available.downloadUrl)
             }
             .setOnCancelListener { updateCheckRequest.dismissPrompt() }.create()
@@ -305,10 +305,10 @@ class MainActivity : Activity() {
     }
     private fun openReleaseLink(url: String) {
         runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)) }
-            .onFailure { message("无法打开下载链接，请安装或启用浏览器后重试。") }
+            .onFailure { message(getString(R.string.open_download_error)) }
     }
     private fun permissionRow(parent: LinearLayout, key: String, label: String, viewId: Int, last: Boolean = false, action: () -> Unit) {
-        val row = ui.actionRow(label, "读取状态中…", action)
+        val row = ui.actionRow(label, getString(R.string.status_loading), action)
         row.detail.id = viewId
         permissionViews[key] = row
         parent.addView(row)
@@ -316,26 +316,26 @@ class MainActivity : Activity() {
     }
     private fun pairingCard(parent: LinearLayout) {
         ui.space(parent, 4)
-        address = ui.field("Bridge 地址", "https://bridge.example.com", R.id.pair_address).also {
+        address = ui.field(getString(R.string.bridge_address), getString(R.string.bridge_url_hint), R.id.pair_address).also {
             it.input.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             it.input.imeOptions = EditorInfo.IME_ACTION_NEXT; it.input.setText(draftAddress)
             parent.addView(it)
         }
-        code = ui.field("一次性配对码", "输入电脑上生成的配对码", R.id.pair_code).also {
+        code = ui.field(getString(R.string.one_time_code), getString(R.string.pairing_code_hint), R.id.pair_code).also {
             it.input.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             it.input.imeOptions = EditorInfo.IME_ACTION_DONE
             it.input.isSaveEnabled = false; it.input.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
             it.input.setOnEditorActionListener { _, actionId, _ -> if (actionId == EditorInfo.IME_ACTION_DONE) { startPairing(); true } else false }
             parent.addView(it)
         }
-        httpToggle = ui.toggle("允许本地 HTTP 连接", "明文传输，仅用于可信的本地开发网络。", R.id.pair_allow_http) {
+        httpToggle = ui.toggle(getString(R.string.allow_local_http), getString(R.string.local_http_detail), R.id.pair_allow_http) {
             allowHttp = it
             if (pairingAttempted) validatePairing()
         }.also { it.bind(allowHttp); parent.addView(it) }
         pairingError = ui.text("", 14f, tint = ui.danger).apply {
             id = R.id.pair_error; visibility = View.GONE; accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }.also { parent.addView(it, ui.gap(top = 10, bottom = 6)) }
-        pairButton = ui.addButton(parent, "配对并连接", ButtonKind.PRIMARY, R.id.pair_submit) { startPairing() }
+        pairButton = ui.addButton(parent, getString(R.string.pair_connect), ButtonKind.PRIMARY, R.id.pair_submit) { startPairing() }
         val watcher = object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
@@ -351,11 +351,11 @@ class MainActivity : Activity() {
                 address?.error(runCatching { BridgeNetwork.normalizeUrl(address?.input?.text.toString(), allowHttp) }.exceptionOrNull()?.message)
             }
         }
-        ui.note(parent, "先在电脑上启动 Bridge 并生成配对码。远程连接使用 HTTPS，手机会验证服务器证书。")
+        ui.note(parent, getString(R.string.pairing_note))
     }
     private fun validatePairing(): Boolean {
         val addressError = runCatching { BridgeNetwork.normalizeUrl(address?.input?.text.toString(), allowHttp) }.exceptionOrNull()?.message
-        val codeError = if (code?.input?.text.isNullOrBlank()) "请输入一次性配对码" else null
+        val codeError = if (code?.input?.text.isNullOrBlank()) getString(R.string.pairing_code_required) else null
         address?.error(addressError); code?.error(codeError)
         return addressError == null && codeError == null
     }
@@ -367,7 +367,7 @@ class MainActivity : Activity() {
             else code?.input?.requestFocus()
             return
         }
-        if (prefs.pendingRevocation != null) { showPairingError("旧身份正在等待 Bridge 撤销。恢复网络后重试，或先在电脑端撤销旧身份。"); return }
+        if (prefs.pendingRevocation != null) { showPairingError(getString(R.string.pending_revocation_detail)); return }
         val url = address!!.input.text.toString(); val pairCode = code!!.input.text.toString()
         pairingRequest.start(url, pairCode, allowHttp)
     }
@@ -394,7 +394,7 @@ class MainActivity : Activity() {
         pairButton?.apply {
             val pending = prefs.pendingRevocation != null
             isEnabled = !busy && !pending
-            text = when { busy -> "正在配对…"; pending -> "等待旧身份撤销"; else -> "配对并连接" }
+            text = when { busy -> getString(R.string.pairing); pending -> getString(R.string.pending_revocation); else -> getString(R.string.pair_connect) }
         }
         address?.input?.isEnabled = !busy; code?.input?.isEnabled = !busy; httpToggle?.toggle?.isEnabled = !busy
     }
@@ -404,26 +404,26 @@ class MainActivity : Activity() {
         if ((identity != null) != pairedAtRender) { render(); return }
         val pending = prefs.pendingRevocation != null
         val state = if (identity == null) {
-            when { pending -> "等待撤销旧身份"; BridgeService.linkStatus.contains("身份无效") -> "需要重新配对"; else -> "未配对" }
-        } else BridgeService.linkStatus
+            when { pending -> getString(R.string.pending_revoke_short); BridgeService.linkStatusResource == R.string.connection_identity_invalid -> getString(R.string.needs_repairing); else -> getString(R.string.unpaired) }
+        } else BridgeService.linkStatus(this)
         connectionState.text = state
-        connectionState.setTextColor(if (state == "已连接") ui.success else ui.ink)
-        connectionDetail.visibility = if (identity == null && !pending && !state.contains("重新配对")) View.GONE else View.VISIBLE
+        connectionState.setTextColor(if (state == getString(R.string.connected)) ui.success else ui.ink)
+        connectionDetail.visibility = if (identity == null && !pending && !state.contains(getString(R.string.needs_repairing))) View.GONE else View.VISIBLE
         connectionDetail.text = when {
-            pending -> "本机已停止访问。联网后会重试撤销 Bridge 上的旧身份，完成后可重新配对。"
-            identity == null -> "填写 Bridge 地址和配对码，建立这台手机的连接。"
-            state == "已连接" -> "手机已连接 Bridge。可用能力取决于访问控制和系统授权。"
-            else -> "访问权限保存在本机，连接恢复后仍按当前授权执行。"
+            pending -> getString(R.string.revoke_detail)
+            identity == null -> getString(R.string.unpaired_detail)
+            state == getString(R.string.connected) -> getString(R.string.connected_detail)
+            else -> getString(R.string.reconnecting_detail)
         }
-        if (!pairing) pairButton?.apply { isEnabled = !pending; text = if (pending) "等待旧身份撤销" else "配对并连接" }
+        if (!pairing) pairButton?.apply { isEnabled = !pending; text = if (pending) getString(R.string.pending_revocation) else getString(R.string.pair_connect) }
         val policy = prefs.policy()
-        accessState.text = when { policy.pausedAll -> "全部访问已暂停"; policy.pausedOperations -> "操作已暂停 · 读取设置保留"; identity == null -> "未暂停 · 连接后按授权开放"; else -> "按当前授权开放访问" }
+        accessState.text = when { policy.pausedAll -> getString(R.string.pause_all_status); policy.pausedOperations -> getString(R.string.paused_operations_access_status); identity == null -> getString(R.string.not_paused_unpaired); else -> getString(R.string.access_open_by_policy) }
         accessState.setTextColor(if (policy.pausedAll || policy.pausedOperations) ui.warning else ui.accent)
         pauseAll.bind(policy.pausedAll); pauseOperations.bind(policy.pausedOperations)
         capabilityRows.forEach { (capability, row) -> row.bind(capability in policy.capabilities) }
         capabilitySummary.text = getString(R.string.capability_summary, policy.capabilities.size)
         val apps = policy.apps.filterKeys { it != packageName }.values
-        val summary = getString(R.string.app_access_summary, apps.size, apps.count { it.read }, apps.count { it.operate })
+        val summary = resources.getQuantityString(R.plurals.app_access_summary_count, apps.size, apps.size, apps.count { it.read }, apps.count { it.operate })
         appSummary.bindDetail(summary)
         shizukuToggle.bind(prefs.shizukuEnabled)
         val systemStates = SystemPermissions.read(this)
@@ -433,34 +433,34 @@ class MainActivity : Activity() {
         }
     }
     private fun confirmUnpair() {
-        val dialog = AlertDialog.Builder(this).setTitle("解除这台手机的配对？")
-            .setMessage("立即停止本机连接与访问。离线时会保留加密的撤销请求，联网后撤销 Bridge 上的旧身份。重新配对不会自动解除暂停。")
-            .setNegativeButton("取消", null).setPositiveButton("解除配对") { _, _ ->
+        val dialog = AlertDialog.Builder(this).setTitle(getString(R.string.unpair_title))
+            .setMessage(getString(R.string.unpair_detail))
+            .setNegativeButton(getString(R.string.cancel), null).setPositiveButton(getString(R.string.unpair)) { _, _ ->
                 runCatching {
                     val identity = prefs.identity ?: return@runCatching
                     prefs.setFlag("pausedAll", true); prefs.pendingRevocation = identity; prefs.identity = null
                     BridgeService.start(this); render()
-                }.onFailure { message(it.message ?: "无法解除配对，请重试") }
+                }.onFailure { message(it.message ?: getString(R.string.unpair_error)) }
             }.create()
         ui.showDialog(dialog)
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(ui.danger)
     }
     private fun saveSettings(success: String? = null, action: () -> Unit) {
         runCatching(action).onSuccess { success?.let { Toast.makeText(this, it, Toast.LENGTH_SHORT).show() } }
-            .onFailure { message(it.message ?: "保存失败，请重试") }
+            .onFailure { message(it.message ?: getString(R.string.save_error)) }
         updateStatus()
     }
     private fun openAppSettings() { openSettings(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) }
     private fun openNotificationSettings() { openSettings(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)) }
-    private fun openSettings(intent: Intent) { runCatching { startActivity(intent) }.onFailure { message("此设备没有对应设置入口，请到系统设置中手动配置") } }
-    private fun message(value: String) { ui.showDialog(AlertDialog.Builder(this).setMessage(value).setPositiveButton("知道了", null).create()) }
+    private fun openSettings(intent: Intent) { runCatching { startActivity(intent) }.onFailure { message(getString(R.string.settings_entry_error)) } }
+    private fun message(value: String) { ui.showDialog(AlertDialog.Builder(this).setMessage(value).setPositiveButton(getString(R.string.acknowledge), null).create()) }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (prefs.identity != null) BridgeService.start(this)
         updateStatus()
         if (grantResults.isNotEmpty() && grantResults.all { it != PackageManager.PERMISSION_GRANTED }) {
-            ui.showDialog(AlertDialog.Builder(this).setMessage("权限尚未允许，可在系统设置中修改授权。")
-                .setNegativeButton("稍后", null).setPositiveButton("打开设置") { _, _ -> if (requestCode == 11) openNotificationSettings() else openAppSettings() }.create())
+            ui.showDialog(AlertDialog.Builder(this).setMessage(getString(R.string.permission_not_granted))
+                .setNegativeButton(getString(R.string.later), null).setPositiveButton(getString(R.string.open_settings)) { _, _ -> if (requestCode == 11) openNotificationSettings() else openAppSettings() }.create())
         }
     }
 }

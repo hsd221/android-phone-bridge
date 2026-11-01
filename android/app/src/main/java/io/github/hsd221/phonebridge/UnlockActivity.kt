@@ -53,8 +53,8 @@ class UnlockActivity : Activity() {
     internal val usesSystemDismiss get() = requestSystemDismiss
 
     internal fun ensureNotCancelled() {
-        if (cancelledByUser) throw ToolFailure("USER_UNLOCK_REQUIRED", "本次解锁已在手机上取消")
-        if (!releasedToKeyguard && (isFinishing || isDestroyed)) throw ToolFailure("UNLOCK_INTERRUPTED", "唤醒窗口已关闭，已停止本地解锁")
+        if (cancelledByUser) throw ToolFailure("USER_UNLOCK_REQUIRED", getString(R.string.unlock_cancelled))
+        if (!releasedToKeyguard && (isFinishing || isDestroyed)) throw ToolFailure("UNLOCK_INTERRUPTED", getString(R.string.unlock_window_closed))
     }
     internal fun releaseToKeyguard() {
         ensureNotCancelled()
@@ -85,11 +85,11 @@ class UnlockActivity : Activity() {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
             setBackgroundColor(getColor(R.color.bridge_background))
             addView(TextView(this@UnlockActivity).apply {
-                text = "正在按手机本地授权解锁…"; gravity = Gravity.CENTER
+                text = getString(R.string.unlocking); gravity = Gravity.CENTER
                 setTextColor(getColor(R.color.bridge_ink))
             })
             addView(Button(this@UnlockActivity).apply {
-                text = "取消本次解锁"
+                text = getString(R.string.cancel_unlock)
                 setOnClickListener { cancelFromUser() }
             })
         })

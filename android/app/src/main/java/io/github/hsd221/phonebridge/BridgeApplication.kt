@@ -12,7 +12,7 @@ class BridgeApplication : Application(), Application.ActivityLifecycleCallbacks 
     private var changingConfiguration = false
     private var mainActivity = WeakReference<MainActivity>(null)
 
-    override fun onCreate() { super.onCreate(); registerActivityLifecycleCallbacks(this) }
+    override fun onCreate() { super.onCreate(); I18n.initialize(this); registerActivityLifecycleCallbacks(this) }
     override fun onActivityStarted(activity: Activity) {
         if (activity is UnlockActivity) return
         if (startedActivities++ == 0) {

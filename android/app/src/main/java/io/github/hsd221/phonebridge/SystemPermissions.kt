@@ -36,34 +36,34 @@ object SystemPermissions {
         val shizuku = ShizukuSupport(context).status()
         return mapOf(
             "accessibility" to PermissionState(when {
-                PhoneAccessibilityService.instance != null -> "已允许，服务已连接"
-                enabledService -> "已允许，服务未连接"
-                else -> "未允许"
+                PhoneAccessibilityService.instance != null -> context.getString(R.string.permission_allowed_connected)
+                enabledService -> context.getString(R.string.permission_allowed_disconnected)
+                else -> context.getString(R.string.permission_denied)
             }, enabledService && PhoneAccessibilityService.instance != null),
             "location" to PermissionState(when {
-                fine -> "已允许精确定位"
-                coarse -> "已允许大概定位，未允许精确定位"
-                else -> "未允许"
+                fine -> context.getString(R.string.location_precise)
+                coarse -> context.getString(R.string.location_approximate)
+                else -> context.getString(R.string.permission_denied)
             }, fine || coarse),
             "backgroundLocation" to PermissionState(when {
-                background && (fine || coarse) -> "已允许（始终允许）"
-                fine || coarse -> "未允许（仅使用期间或本次允许）"
-                else -> "未允许，请先授予定位权限"
+                background && (fine || coarse) -> context.getString(R.string.background_allowed)
+                fine || coarse -> context.getString(R.string.background_limited)
+                else -> context.getString(R.string.background_requires_location)
             }, background && (fine || coarse)),
-            "locationService" to PermissionState(if (locationEnabled) "已开启" else "已关闭", locationEnabled),
+            "locationService" to PermissionState(if (locationEnabled) context.getString(R.string.enabled) else context.getString(R.string.disabled), locationEnabled),
             "notifications" to PermissionState(when {
-                !notificationsEnabled -> "未允许"
-                !channelEnabled -> "应用已允许，连接通知类别已关闭"
-                else -> "已允许"
+                !notificationsEnabled -> context.getString(R.string.permission_denied)
+                !channelEnabled -> context.getString(R.string.notification_channel_disabled)
+                else -> context.getString(R.string.permission_allowed)
             }, notificationsEnabled && channelEnabled),
-            "battery" to PermissionState(if (batteryExempt) "已豁免电池优化" else "未豁免，仍受电池优化", batteryExempt),
-            "background" to PermissionState(if (backgroundRestricted) "受系统限制" else "未受系统限制", !backgroundRestricted),
-            "autostart" to PermissionState("需手动确认（厂商未提供统一查询接口）"),
+            "battery" to PermissionState(if (batteryExempt) context.getString(R.string.battery_exempt) else context.getString(R.string.battery_not_exempt), batteryExempt),
+            "background" to PermissionState(if (backgroundRestricted) context.getString(R.string.system_restricted) else context.getString(R.string.system_unrestricted), !backgroundRestricted),
+            "autostart" to PermissionState(context.getString(R.string.autostart_manual)),
             "shizuku" to PermissionState(when {
-                !shizuku.optBoolean("running") -> "服务未启动"
-                !shizuku.optBoolean("permissionGranted") -> "服务已启动，未允许本应用使用"
-                !shizuku.optBoolean("available") -> "已授权，当前模式不支持；需非 Root 模式"
-                else -> "已授权，可用（非 Root）"
+                !shizuku.optBoolean("running") -> context.getString(R.string.service_not_started)
+                !shizuku.optBoolean("permissionGranted") -> context.getString(R.string.service_not_allowed)
+                !shizuku.optBoolean("available") -> context.getString(R.string.shizuku_unsupported)
+                else -> context.getString(R.string.shizuku_available)
             }, shizuku.optBoolean("available")),
         )
     }

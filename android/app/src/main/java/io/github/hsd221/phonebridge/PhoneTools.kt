@@ -18,7 +18,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 class PhoneTools(private val service: BridgeService, private val prefs: BridgePrefs) {
-    private fun accessibility() = PhoneAccessibilityService.instance ?: throw ToolFailure("ACCESSIBILITY_UNAVAILABLE", "请在系统设置中启用手机工具桥无障碍服务")
+    private fun accessibility() = PhoneAccessibilityService.instance ?: throw ToolFailure("ACCESSIBILITY_UNAVAILABLE", text(R.string.err_accessibility_required))
     private fun granted(permission: String) = service.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
     private val shizuku = ShizukuSupport(service)
     suspend fun execute(tool: String, args: JSONObject, ensure: () -> Unit): JSONObject {
@@ -35,7 +35,7 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
             "phone_input" -> accessibility().input(args, ensure)
             "phone_back" -> accessibility().back(args, ensure)
             "phone_open_app" -> openApp(args.getString("packageName"), ensure)
-            else -> throw ToolFailure("UNKNOWN_TOOL", "手机不支持此工具")
+            else -> throw ToolFailure("UNKNOWN_TOOL", text(R.string.err_unknown_tool))
         }
     }
     fun status(): JSONObject {
@@ -58,13 +58,13 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
                 .put("lastAttempt", UnlockDiagnostics.snapshot() ?: JSONObject.NULL))
     }
     private suspend fun location(ensure: () -> Unit): JSONObject {
-        if (!granted(Manifest.permission.ACCESS_COARSE_LOCATION) && !granted(Manifest.permission.ACCESS_FINE_LOCATION)) throw ToolFailure("PERMISSION_REQUIRED", "未授予系统定位权限")
-        if (!service.locationForeground && !granted(Manifest.permission.ACCESS_BACKGROUND_LOCATION)) throw ToolFailure("BACKGROUND_LOCATION_REQUIRED", "请打开 APK 启动定位前台服务，或在设置中允许始终定位")
+        if (!granted(Manifest.permission.ACCESS_COARSE_LOCATION) && !granted(Manifest.permission.ACCESS_FINE_LOCATION)) throw ToolFailure("PERMISSION_REQUIRED", text(R.string.err_location_permission_required))
+        if (!service.locationForeground && !granted(Manifest.permission.ACCESS_BACKGROUND_LOCATION)) throw ToolFailure("BACKGROUND_LOCATION_REQUIRED", text(R.string.err_background_location_required))
         val manager = service.getSystemService(LocationManager::class.java)
-        if (!manager.isLocationEnabled) throw ToolFailure("LOCATION_DISABLED", "系统定位开关已关闭")
+        if (!manager.isLocationEnabled) throw ToolFailure("LOCATION_DISABLED", text(R.string.err_location_disabled))
         val candidates = manager.getProviders(true).filter { it in setOf("fused", LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER) }
             .filter { it != LocationManager.GPS_PROVIDER || granted(Manifest.permission.ACCESS_FINE_LOCATION) }
-        if (candidates.isEmpty()) throw ToolFailure("LOCATION_UNAVAILABLE", "没有可用的定位来源")
+        if (candidates.isEmpty()) throw ToolFailure("LOCATION_UNAVAILABLE", text(R.string.err_location_unavailable))
         val location = suspendCancellableCoroutine<Location> { continuation ->
             val signals = candidates.map { CancellationSignal() }
             var remaining = candidates.size
@@ -75,11 +75,11 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
                     if (value != null && SystemClock.elapsedRealtimeNanos() - value.elapsedRealtimeNanos <= 30_000_000_000L) {
                         signals.forEach(CancellationSignal::cancel)
                         continuation.resume(value)
-                    } else if (--remaining == 0) continuation.resumeWithException(ToolFailure("LOCATION_UNAVAILABLE", "未能获得 30 秒内的当前位置"))
+                    } else if (--remaining == 0) continuation.resumeWithException(ToolFailure("LOCATION_UNAVAILABLE", text(R.string.err_location_timeout)))
                 } } catch (_: SecurityException) {
                     if (--remaining == 0 && continuation.isActive) {
                         signals.forEach(CancellationSignal::cancel)
-                        continuation.resumeWithException(ToolFailure("PERMISSION_REQUIRED", "定位权限已被系统或用户撤回"))
+                        continuation.resumeWithException(ToolFailure("PERMISSION_REQUIRED", text(R.string.err_location_permission_revoked)))
                     }
                 }
             }
@@ -92,12 +92,12 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
             .put("mock", if (Build.VERSION.SDK_INT >= 31) location.isMock else @Suppress("DEPRECATION") location.isFromMockProvider)
     }
     private suspend fun openApp(packageName: String, ensure: () -> Unit): JSONObject {
-        if (packageName == service.packageName) throw ToolFailure("APP_DENIED", "手机工具桥设置不能被远程打开或修改")
+        if (packageName == service.packageName) throw ToolFailure("APP_DENIED", text(R.string.err_bridge_app_local_only))
         prefs.policy().requireApp(packageName, operation = true)
-        if (service.getSystemService(KeyguardManager::class.java).isKeyguardLocked) throw ToolFailure("DEVICE_LOCKED", "设备已锁屏；可调用单独授权的 phone_unlock，或在手机上解锁")
-        val launcher = service.packageManager.getLaunchIntentForPackage(packageName) ?: throw ToolFailure("APP_UNAVAILABLE", "未安装此应用或没有可见启动入口")
+        if (service.getSystemService(KeyguardManager::class.java).isKeyguardLocked) throw ToolFailure("DEVICE_LOCKED", text(R.string.err_device_locked))
+        val launcher = service.packageManager.getLaunchIntentForPackage(packageName) ?: throw ToolFailure("APP_UNAVAILABLE", text(R.string.err_target_app_unavailable))
         if (prefs.shizukuEnabled && shizuku.status().optBoolean("available")) {
-            return shizuku.launch(launcher.component ?: throw ToolFailure("APP_UNAVAILABLE", "应用入口无效"), ensure)
+            return shizuku.launch(launcher.component ?: throw ToolFailure("APP_UNAVAILABLE", text(R.string.err_app_entry_invalid)), ensure)
         }
         val accessibility = accessibility()
         ensure()
@@ -111,7 +111,7 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
         fun range(key: String, min: Int, max: Int, required: Boolean = false) {
             if (!args.has(key) && !required) return
             val value = args.opt(key)
-            if (value !is Number || value.toDouble() % 1.0 != 0.0 || value.toLong() !in min.toLong()..max.toLong()) throw ToolFailure("INVALID_ARGUMENT", "$key 参数无效")
+            if (value !is Number || value.toDouble() % 1.0 != 0.0 || value.toLong() !in min.toLong()..max.toLong()) throw ToolFailure("INVALID_ARGUMENT", text(R.string.err_argument_invalid, key))
         }
         val keys = when (tool) {
             "phone_status", "phone_unlock" -> emptySet()
@@ -121,19 +121,19 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
             "phone_open_app", "phone_back" -> setOf("packageName")
             "phone_tap" -> setOf("packageName", "nodeId", "x", "y").also {
                 if (args.has("nodeId")) {
-                    if (args.has("x") || args.has("y")) throw ToolFailure("INVALID_ARGUMENT", "控件和坐标不能同时提供")
+                    if (args.has("x") || args.has("y")) throw ToolFailure("INVALID_ARGUMENT", text(R.string.err_node_coordinate_conflict))
                 } else { range("x", 0, 16384, true); range("y", 0, 16384, true) }
             }
             "phone_swipe" -> setOf("packageName", "fromX", "fromY", "toX", "toY", "durationMs").also {
                 listOf("fromX", "fromY", "toX", "toY").forEach { range(it, 0, 16384, true) }; range("durationMs", 100, 2000)
             }
             "phone_input" -> setOf("packageName", "text", "nodeId").also {
-                if (args.opt("text") !is String || args.getString("text").length > 10000) throw ToolFailure("INVALID_ARGUMENT", "文字无效或过长")
+                if (args.opt("text") !is String || args.getString("text").length > 10000) throw ToolFailure("INVALID_ARGUMENT", text(R.string.err_input_text_invalid))
             }
-            else -> throw ToolFailure("UNKNOWN_TOOL", "手机不支持此工具")
+            else -> throw ToolFailure("UNKNOWN_TOOL", text(R.string.err_unknown_tool))
         }
-        if (args.keys().asSequence().any { it !in keys }) throw ToolFailure("INVALID_ARGUMENT", "存在未知参数")
-        if ("packageName" in keys && (args.opt("packageName") !is String || !args.getString("packageName").matches(Regex("[a-zA-Z][\\w]*(\\.[\\w]+)+")) || args.getString("packageName").length > 255)) throw ToolFailure("INVALID_ARGUMENT", "应用包名无效")
-        if (args.has("nodeId") && (args.opt("nodeId") !is String || args.getString("nodeId").length > 100)) throw ToolFailure("INVALID_ARGUMENT", "控件 ID 无效")
+        if (args.keys().asSequence().any { it !in keys }) throw ToolFailure("INVALID_ARGUMENT", text(R.string.err_unknown_parameter))
+        if ("packageName" in keys && (args.opt("packageName") !is String || !args.getString("packageName").matches(Regex("[a-zA-Z][\\w]*(\\.[\\w]+)+")) || args.getString("packageName").length > 255)) throw ToolFailure("INVALID_ARGUMENT", text(R.string.err_package_name_invalid))
+        if (args.has("nodeId") && (args.opt("nodeId") !is String || args.getString("nodeId").length > 100)) throw ToolFailure("INVALID_ARGUMENT", text(R.string.err_node_id_invalid))
     }
 }

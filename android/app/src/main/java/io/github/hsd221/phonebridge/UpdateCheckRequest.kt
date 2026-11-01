@@ -37,14 +37,14 @@ internal class UpdateCheckRequest(
         changed?.invoke()
         scope.launch {
             try {
-                val installed = current ?: throw UpdateCheckException("当前版本无法识别，请查看发布页面。")
+                val installed = current ?: throw UpdateCheckException(text(R.string.err_version_unknown))
                 release = load().takeIf { it.version > installed }
                 if (automatic && !promptDismissed) pendingPrompt = release
                 checked = true
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
-                error = failure.message ?: "检查更新失败，请稍后重试。"
+                error = failure.message ?: text(R.string.err_update_check_failed)
             } finally {
                 busy = false; changed?.invoke()
             }

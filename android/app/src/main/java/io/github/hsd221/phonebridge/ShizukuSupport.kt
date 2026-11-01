@@ -26,11 +26,11 @@ class ShizukuSupport(private val context: Context) {
         } catch (_: Exception) { JSONObject().put("running", false).put("permissionGranted", false).put("available", false) }
     }
     fun requestPermission() {
-        if (!Shizuku.pingBinder()) throw ToolFailure("SHIZUKU_UNAVAILABLE", "请先在 Shizuku 中启动服务；非 Root 设备重启后需重新启动")
+        if (!Shizuku.pingBinder()) throw ToolFailure("SHIZUKU_UNAVAILABLE", text(R.string.err_shizuku_start_required))
         Shizuku.requestPermission(101)
     }
     suspend fun launch(component: ComponentName, ensure: () -> Unit): JSONObject {
-        if (!status().optBoolean("available")) throw ToolFailure("SHIZUKU_UNAVAILABLE", "Shizuku 未启动、未授权或不是非 Root 模式")
+        if (!status().optBoolean("available")) throw ToolFailure("SHIZUKU_UNAVAILABLE", text(R.string.err_shizuku_unavailable))
         val args = Shizuku.UserServiceArgs(ComponentName(context, ShizukuLauncherService::class.java)).daemon(false).processNameSuffix("launcher").version(1)
         var connection: ServiceConnection? = null
         try {
@@ -41,16 +41,16 @@ class ShizukuSupport(private val context: Context) {
                             if (continuation.isActive) continuation.resume(IAppLauncher.Stub.asInterface(binder))
                         }
                         override fun onServiceDisconnected(name: ComponentName?) {
-                            if (continuation.isActive) continuation.resumeWithException(ToolFailure("SHIZUKU_UNAVAILABLE", "Shizuku 服务已断开"))
+                            if (continuation.isActive) continuation.resumeWithException(ToolFailure("SHIZUKU_UNAVAILABLE", text(R.string.err_shizuku_disconnected)))
                         }
                     }
                     Shizuku.bindUserService(args, connection!!)
                 }
             }
             ensure()
-            if (launcher.uid() != 2000) throw ToolFailure("SHIZUKU_UNAVAILABLE", "仅支持非 Root Shizuku")
+            if (launcher.uid() != 2000) throw ToolFailure("SHIZUKU_UNAVAILABLE", text(R.string.err_shizuku_nonroot_only))
             val result = withContext(Dispatchers.IO) { ensure(); launcher.launch(component.packageName, component.className) }
-            if (result != 0) throw ToolFailure("ACTION_REJECTED", "Shizuku 应用启动失败：$result", outcomeUnknown = result == -4)
+            if (result != 0) throw ToolFailure("ACTION_REJECTED", text(R.string.err_shizuku_launch_failed, result), outcomeUnknown = result == -4)
             return JSONObject().put("accepted", true).put("path", "shizuku")
         } finally { connection?.let { runCatching { Shizuku.unbindUserService(args, it, true) } } }
     }

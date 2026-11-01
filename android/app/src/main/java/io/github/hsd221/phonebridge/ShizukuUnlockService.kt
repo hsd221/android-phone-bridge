@@ -20,6 +20,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 /** Narrow shell-UID service: all inspection and input stay in code from this APK. */
 @SuppressLint("PrivateApi") // Shizuku shell UserServices explicitly support non-SDK APIs; never used in the app process.
 class ShizukuUnlockService(private val context: Context) : ILocalKeyguard.Stub() {
+    init { I18n.initialize(context) }
     private val ownerUid = context.applicationInfo.uid
     private val keyguard = context.getSystemService(KeyguardManager::class.java)
     private val ui = KeyguardUi(context)
@@ -168,8 +169,8 @@ class ShizukuUnlockService(private val context: Context) : ILocalKeyguard.Stub()
     @Synchronized override fun reason(): Int = if (authorized()) lastReason.ordinal else UnlockDiagnostics.Reason.NONE.ordinal
 
     private fun root(mode: UnlockKind): AccessibilityNodeInfo {
-        if (!keyguard.isKeyguardLocked || !keyguard.isDeviceLocked) throw ToolFailure("UNLOCK_INTERRUPTED", "系统锁屏状态已改变")
-        val client = automation ?: throw ToolFailure("SHIZUKU_UNAVAILABLE", "Shizuku 本地输入服务不可用")
+        if (!keyguard.isKeyguardLocked || !keyguard.isDeviceLocked) throw ToolFailure("UNLOCK_INTERRUPTED", text(R.string.err_keyguard_state_changed))
+        val client = automation ?: throw ToolFailure("SHIZUKU_UNAVAILABLE", text(R.string.err_shizuku_input_unavailable))
         if (Build.VERSION.SDK_INT >= 34) {
             client.clearCache()
         } else {
@@ -183,7 +184,7 @@ class ShizukuUnlockService(private val context: Context) : ILocalKeyguard.Stub()
             }
         }
         return ui.systemRoot(client.windows, mode == UnlockKind.PASSWORD)
-            ?: throw ToolFailure("UNLOCK_INTERRUPTED", "无法确认系统锁屏或存在覆盖窗口")
+            ?: throw ToolFailure("UNLOCK_INTERRUPTED", text(R.string.err_keyguard_window_unavailable))
     }
 
     private fun tap(node: AccessibilityNodeInfo): Int {

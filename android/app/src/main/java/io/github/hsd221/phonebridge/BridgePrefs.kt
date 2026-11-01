@@ -61,9 +61,9 @@ class BridgePrefs(private val context: Context) {
             editor.putString("apps", apps.toString())
         }
         capabilities?.let { enabled -> Capability.entries.forEach { editor.putBoolean("cap_${it.name}", it in enabled) } }
-        check(editor.commit()) { "无法保存权限，请重试" }
+        check(editor.commit()) { text(R.string.err_permissions_save_failed) }
     }
-    fun setFlag(key: String, value: Boolean) { check(preferences.edit().putBoolean(key, value).commit()) { "无法保存设置，请重试" } }
+    fun setFlag(key: String, value: Boolean) { check(preferences.edit().putBoolean(key, value).commit()) { text(R.string.err_settings_save_failed) } }
     private fun readIdentity(key: String): PhoneIdentity? {
         val encrypted = preferences.getString(key, null) ?: return null
         return try {
@@ -76,7 +76,7 @@ class BridgePrefs(private val context: Context) {
         if (value == null) editor.remove(key)
         else editor.putString(key, vault.encrypt(JSONObject().put("url", value.url).put("token", value.token)
             .put("deviceId", value.deviceId).put("insecure", value.insecure).toString()))
-        check(editor.commit()) { "无法保存连接身份" }
+        check(editor.commit()) { text(R.string.err_identity_save_failed) }
     }
 }
 

@@ -77,7 +77,7 @@ internal class ShizukuCredentialInput private constructor(
                 }
                 checkResult(result, reason)
             }
-            catch (_: LocalInputUnavailable) { throw ToolFailure("UNLOCK_INTERRUPTED", "Shizuku 输入连接已断开，已停止；请在手机上检查后重新允许尝试", true) }
+            catch (_: LocalInputUnavailable) { throw ToolFailure("UNLOCK_INTERRUPTED", text(R.string.err_shizuku_input_disconnected), true) }
         }
         when (credential.kind) {
             UnlockKind.PIN -> {
@@ -107,9 +107,9 @@ internal class ShizukuCredentialInput private constructor(
         val reason = reasonOrdinal?.let { UnlockDiagnostics.Reason.entries.getOrNull(it) }
         if (reason != null) UnlockDiagnostics.refused(reason)
         when (result) {
-            ShellUnlockResult.UNSUPPORTED -> throw ToolFailure("UNLOCK_UNSUPPORTED", "此系统锁屏暂不支持本地自动输入，请在手机上手动解锁")
-            ShellUnlockResult.USER_REQUIRED -> throw ToolFailure("USER_UNLOCK_REQUIRED", "无法确认锁屏输入框为空，请在手机上处理")
-            else -> throw ToolFailure("UNLOCK_INTERRUPTED", "系统锁屏状态或 Shizuku 输入连接已改变，已停止本地输入")
+            ShellUnlockResult.UNSUPPORTED -> throw ToolFailure("UNLOCK_UNSUPPORTED", text(R.string.err_unlock_unsupported))
+            ShellUnlockResult.USER_REQUIRED -> throw ToolFailure("USER_UNLOCK_REQUIRED", text(R.string.err_lock_input_unverified))
+            else -> throw ToolFailure("UNLOCK_INTERRUPTED", text(R.string.err_keyguard_shizuku_changed))
         }
     }
     override fun close() = release()

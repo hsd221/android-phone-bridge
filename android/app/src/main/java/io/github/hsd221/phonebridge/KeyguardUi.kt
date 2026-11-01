@@ -106,7 +106,7 @@ internal class KeyguardUi(private val context: Context) {
                             PinEmptyControlCheck.AMBIGUOUS -> UnlockDiagnostics.Reason.BACK_CONTROL_AMBIGUOUS
                             else -> UnlockDiagnostics.Reason.BACK_CONTROL_NOT_ACTIONABLE
                         })
-                        throw ToolFailure("USER_UNLOCK_REQUIRED", "无法确认 PIN 输入框为空，请在手机上处理")
+                        throw ToolFailure("USER_UNLOCK_REQUIRED", text(R.string.err_pin_field_unverified))
                     }
                     PinAutoConfirmCheck.KEYPAD_UNVERIFIED -> unsupported(UnlockDiagnostics.Reason.AUTO_CONFIRM_UNVERIFIED)
                 }
@@ -127,11 +127,11 @@ internal class KeyguardUi(private val context: Context) {
     }
     fun existingInput(): Nothing {
         UnlockDiagnostics.refused(UnlockDiagnostics.Reason.ENTRY_NOT_EMPTY)
-        throw ToolFailure("USER_UNLOCK_REQUIRED", "锁屏输入框已有内容，请先在手机上处理")
+        throw ToolFailure("USER_UNLOCK_REQUIRED", text(R.string.err_lock_field_not_empty))
     }
     fun unsupported(reason: UnlockDiagnostics.Reason = UnlockDiagnostics.Reason.UNRECOGNIZED): Nothing {
         UnlockDiagnostics.refused(reason)
-        throw ToolFailure("UNLOCK_UNSUPPORTED", "此系统锁屏暂不支持本地自动输入，请在手机上手动解锁")
+        throw ToolFailure("UNLOCK_UNSUPPORTED", text(R.string.err_unlock_unsupported))
     }
 
 }

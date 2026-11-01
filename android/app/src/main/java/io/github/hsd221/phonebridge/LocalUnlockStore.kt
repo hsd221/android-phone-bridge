@@ -4,7 +4,9 @@ import android.annotation.SuppressLint
 import android.content.Context
 import org.json.JSONObject
 
-enum class UnlockKind(val label: String) { PIN("数字 PIN"), PASSWORD("文字密码"), PATTERN("图案") }
+enum class UnlockKind(val labelRes: Int) {
+    PIN(R.string.unlock_kind_pin), PASSWORD(R.string.unlock_kind_password), PATTERN(R.string.unlock_kind_pattern)
+}
 
 /** Never include a credential in diagnostics, tool results, intents, or saved view state. */
 class UnlockCredential(val kind: UnlockKind, val value: String) {
@@ -14,7 +16,7 @@ class UnlockCredential(val kind: UnlockKind, val value: String) {
             UnlockKind.PASSWORD -> value.length in 4..64 && value.none { it.isISOControl() }
             UnlockKind.PATTERN -> value.length in 4..9 && value.all { it in '1'..'9' } &&
                 value.toSet().size == value.length && PatternSequence.normalize(value) == value
-        }) { "格式无效：PIN 为 4–16 位数字；密码为 4–64 个字符；图案至少连接 4 个不同的点" }
+        }) { text(R.string.err_credential_invalid) }
     }
     override fun toString() = "UnlockCredential(${kind.name}, [redacted])"
 }
@@ -22,7 +24,7 @@ class UnlockCredential(val kind: UnlockKind, val value: String) {
 /** Android inserts an unvisited midpoint when a pattern crosses it. */
 object PatternSequence {
     fun normalize(value: String): String {
-        require(value.all { it in '1'..'9' }) { "图案节点无效" }
+        require(value.all { it in '1'..'9' }) { text(R.string.err_pattern_node_invalid) }
         val result = mutableListOf<Int>()
         for (char in value) {
             val next = char - '1'
@@ -54,23 +56,23 @@ class LocalUnlockStore(context: Context) {
             val json = JSONObject(vault.decrypt(encrypted))
             UnlockCredential(UnlockKind.valueOf(json.getString("kind")), json.getString("value"))
         } catch (_: Exception) {
-            throw ToolFailure("LOCAL_CREDENTIAL_UNAVAILABLE", "本地解锁凭据无法读取，请在手机上重新配置")
+            throw ToolFailure("LOCAL_CREDENTIAL_UNAVAILABLE", text(R.string.err_local_credential_unreadable))
         }
     }
     fun save(credential: UnlockCredential) {
         val encrypted = vault.encrypt(JSONObject().put("kind", credential.kind.name).put("value", credential.value).toString())
-        check(preferences.edit().putString("credential", encrypted).putBoolean("attemptPending", false).commit()) { "无法保存本地解锁配置" }
+        check(preferences.edit().putString("credential", encrypted).putBoolean("attemptPending", false).commit()) { text(R.string.err_local_credential_save_failed) }
     }
     fun beginAttempt() {
-        if (retryBlocked) throw ToolFailure("UNLOCK_RETRY_BLOCKED", "上次自动解锁未确认成功，请在手机本地检查凭据并重新允许尝试")
+        if (retryBlocked) throw ToolFailure("UNLOCK_RETRY_BLOCKED", text(R.string.err_unlock_retry_blocked_credentials))
         // Persist BEFORE the first credential action: crashes/cancellation must not enable retries.
-        check(preferences.edit().putBoolean("attemptPending", true).commit()) { "无法记录本地解锁状态" }
+        check(preferences.edit().putBoolean("attemptPending", true).commit()) { text(R.string.err_unlock_attempt_record_failed) }
     }
     fun allowNextAttempt() {
-        check(preferences.edit().putBoolean("attemptPending", false).commit()) { "无法保存本地解锁状态" }
+        check(preferences.edit().putBoolean("attemptPending", false).commit()) { text(R.string.err_unlock_state_save_failed) }
     }
     fun clear() {
-        check(preferences.edit().clear().commit()) { "无法删除本地解锁凭据" }
+        check(preferences.edit().clear().commit()) { text(R.string.err_local_credential_delete_failed) }
         vault.destroy()
     }
 }

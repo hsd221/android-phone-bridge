@@ -43,11 +43,13 @@ import kotlin.random.Random
 class BridgeService : Service() {
     companion object {
         @Volatile var connected = false; private set
-        @Volatile var linkStatus = "尚未启动"; private set
+        @Volatile var linkStatusResource = R.string.foreground_not_started; private set
+        val linkStatus: String get() = I18n.get(linkStatusResource)
+        fun linkStatus(context: Context) = context.getString(linkStatusResource)
         @Volatile var activityVisible = false
         fun start(context: Context, action: String? = null) {
             try { context.startForegroundService(Intent(context, BridgeService::class.java).setAction(action)) }
-            catch (_: Exception) { linkStatus = "系统阻止后台启动，请打开 APK 后重试" }
+            catch (_: Exception) { linkStatusResource = R.string.background_start_blocked }
         }
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -64,7 +66,7 @@ class BridgeService : Service() {
     var locationForeground = false; private set
     private val changes = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         epoch.incrementAndGet()
-        cancelRequests("用户已更改授权或连接身份")
+        cancelRequests(getString(R.string.authorization_changed))
         PhoneAccessibilityService.instance?.invalidate()
         if (key == "identity") socket?.cancel()
         updateNotification()
@@ -88,7 +90,7 @@ class BridgeService : Service() {
     override fun onCreate() {
         super.onCreate()
         prefs = BridgePrefs(this); tools = PhoneTools(this, prefs)
-        getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel("bridge", "手机工具桥连接", NotificationManager.IMPORTANCE_LOW))
+        getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel("bridge", getString(R.string.notification_channel), NotificationManager.IMPORTANCE_LOW))
         prefs.preferences.registerOnSharedPreferenceChangeListener(changes)
         getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(networkCallback)
     }
@@ -120,16 +122,16 @@ class BridgeService : Service() {
             val identity = prefs.identity
             if (identity == null) {
                 connected = false
-                if (prefs.pendingRevocation == null) { linkStatus = "未配对"; stopSelf(); return }
-                linkStatus = "已本机解绑，等待网络撤销 Bridge 身份"; updateNotification(); delay(10000); continue
+                if (prefs.pendingRevocation == null) { linkStatusResource = R.string.unpaired; stopSelf(); return }
+                linkStatusResource = R.string.unpaired_locally; updateNotification(); delay(10000); continue
             }
             if (gateDeviceId != identity.deviceId) { gate = RequestGate(identity.deviceId); gateDeviceId = identity.deviceId }
-            linkStatus = "正在连接"; updateNotification()
+            linkStatusResource = R.string.connecting; updateNotification()
             try { runSession(identity); attempt = if (connected) 0 else attempt + 1 }
             catch (_: Exception) { attempt++ }
-            finally { connected = false; epoch.incrementAndGet(); cancelRequests("连接中断，不重放请求"); PhoneAccessibilityService.instance?.invalidate() }
+            finally { connected = false; epoch.incrementAndGet(); cancelRequests(getString(R.string.connection_interrupted)); PhoneAccessibilityService.instance?.invalidate() }
             if (prefs.identity == null) continue
-            linkStatus = "连接中断，自动重连中"; updateNotification()
+            linkStatusResource = R.string.reconnecting; updateNotification()
             delay(min(30000L, 1000L shl attempt.coerceIn(0, 5)) + Random.nextLong(500))
         }
     }
@@ -138,7 +140,7 @@ class BridgeService : Service() {
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) { scope.launch {
                 if (!continuation.isActive || prefs.identity != identity) { webSocket.cancel(); return@launch }
-                linkStatus = "正在验证连接"; updateNotification()
+                linkStatusResource = R.string.verifying_connection; updateNotification()
                 webSocket.send(JSONObject().put("type", "hello").put("protocol", 1).put("deviceId", identity.deviceId).toString())
             } }
             override fun onMessage(webSocket: WebSocket, text: String) { scope.launch {
@@ -151,10 +153,10 @@ class BridgeService : Service() {
                             if (message.getInt("protocol") != 1 || message.getString("deviceId") != identity.deviceId) {
                                 webSocket.close(1008, "Identity mismatch"); return@launch
                             }
-                            connected = true; linkStatus = "已连接"; updateNotification()
+                            connected = true; linkStatusResource = R.string.connected; updateNotification()
                         }
                         "request" -> accept(message, webSocket, identity)
-                        "cancel" -> jobs[message.getString("id")]?.cancel(CancellationException("Bridge 已取消请求"))
+                        "cancel" -> jobs[message.getString("id")]?.cancel(CancellationException(getString(R.string.bridge_cancelled)))
                         else -> webSocket.close(1008, "Unknown message")
                     }
                 } catch (_: Exception) { webSocket.close(1008, "Invalid request") }
@@ -164,7 +166,7 @@ class BridgeService : Service() {
                 if (continuation.isActive) continuation.resume(Unit)
             } }
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) { scope.launch {
-                if (response?.code == 401 && prefs.identity == identity) { prefs.identity = null; linkStatus = "连接身份无效，请重新配对" }
+                if (response?.code == 401 && prefs.identity == identity) { prefs.identity = null; linkStatusResource = R.string.connection_identity_invalid }
                 if (continuation.isActive) continuation.resume(Unit)
             } }
         }
@@ -177,7 +179,7 @@ class BridgeService : Service() {
         val tool = message.optString("tool")
         try {
             gate!!.accept(id, message.getString("deviceId"), message.getInt("protocol"), message.getLong("issuedAt"), message.getLong("expiresAt"))
-            if (jobs.size >= 8) throw ToolFailure("BUSY", "手机请求队列已满")
+            if (jobs.size >= 8) throw ToolFailure("BUSY", getString(R.string.request_queue_full))
             prefs.policy().requireTool(tool)
         } catch (failure: ToolFailure) { sendResult(webSocket, identity, id, error(failure.code, failure.message)); return }
         val acceptedEpoch = epoch.get()
@@ -188,8 +190,8 @@ class BridgeService : Service() {
         val job = scope.launch(start = CoroutineStart.LAZY) {
             val ensure = {
                 coroutineContext.ensureActive()
-                if (epoch.get() != acceptedEpoch || socket !== webSocket || !connected) throw ToolFailure("CANCELLED", "连接或授权状态已改变")
-                if (System.currentTimeMillis() >= deadline) throw ToolFailure("EXPIRED", "请求已过期")
+                if (epoch.get() != acceptedEpoch || socket !== webSocket || !connected) throw ToolFailure("CANCELLED", getString(R.string.connection_or_auth_changed))
+                if (System.currentTimeMillis() >= deadline) throw ToolFailure("EXPIRED", getString(R.string.request_expired))
                 prefs.policy().requireTool(tool)
             }
             val result = try {
@@ -200,10 +202,10 @@ class BridgeService : Service() {
                     }
                 }
             } catch (failure: ToolFailure) { error(failure.code, failure.message, failure.outcomeUnknown) }
-            catch (_: kotlinx.coroutines.TimeoutCancellationException) { error("TIMEOUT", "请求或系统能力获取超时，已派发的操作可能已执行", operation && started) }
-            catch (_: CancellationException) { error("CANCELLED", "请求已取消；已交给系统的动作可能已执行", operation && started) }
-            catch (_: SecurityException) { error("PERMISSION_REQUIRED", "Android 系统拒绝访问，请检查权限", operation && started) }
-            catch (_: Exception) { error("EXECUTION_FAILED", "工具执行失败，请检查系统与应用状态", operation && started) }
+            catch (_: kotlinx.coroutines.TimeoutCancellationException) { error("TIMEOUT", getString(R.string.request_timed_out), operation && started) }
+            catch (_: CancellationException) { error("CANCELLED", getString(R.string.request_cancelled), operation && started) }
+            catch (_: SecurityException) { error("PERMISSION_REQUIRED", getString(R.string.android_permission_denied), operation && started) }
+            catch (_: Exception) { error("EXECUTION_FAILED", getString(R.string.tool_execution_failed), operation && started) }
             sendResult(webSocket, identity, id, result)
         }
         jobs[id] = job
@@ -220,15 +222,15 @@ class BridgeService : Service() {
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         fun pause(action: String, code: Int) = PendingIntent.getService(this, code, Intent(this, BridgeService::class.java).setAction(action), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val policy = prefs.policy()
-        val state = when { policy.pausedAll -> "全部访问已暂停"; policy.pausedOperations -> "操作已暂停 · $linkStatus"; else -> linkStatus }
-        return Notification.Builder(this, "bridge").setSmallIcon(R.drawable.ic_bridge).setContentTitle("手机工具桥").setContentText(state)
+        val state = when { policy.pausedAll -> getString(R.string.pause_all_status); policy.pausedOperations -> getString(R.string.paused_operations_status, getString(linkStatusResource)); else -> getString(linkStatusResource) }
+        return Notification.Builder(this, "bridge").setSmallIcon(R.drawable.ic_bridge).setContentTitle(getString(R.string.app_name)).setContentText(state)
             .setContentIntent(open).setOngoing(true).setCategory(Notification.CATEGORY_SERVICE)
-            .addAction(Notification.Action.Builder(null, "暂停操作", pause("pause_operations", 1)).build())
-            .addAction(Notification.Action.Builder(null, "暂停全部", pause("pause_all", 2)).build()).build()
+            .addAction(Notification.Action.Builder(null, getString(R.string.pause_operations), pause("pause_operations", 1)).build())
+            .addAction(Notification.Action.Builder(null, getString(R.string.pause_all_action), pause("pause_all", 2)).build()).build()
     }
     private fun updateNotification() { getSystemService(NotificationManager::class.java).notify(1, notification()) }
     override fun onDestroy() {
-        connected = false; linkStatus = "服务已停止，打开 APK 可恢复"
+        connected = false; linkStatusResource = R.string.service_stopped
         prefs.preferences.unregisterOnSharedPreferenceChangeListener(changes)
         getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(networkCallback)
         socket?.cancel(); scope.cancel(); super.onDestroy()

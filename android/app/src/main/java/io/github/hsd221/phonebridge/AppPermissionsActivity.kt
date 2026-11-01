@@ -76,7 +76,7 @@ class AppPermissionsActivity : Activity() {
                 val access = ui.text("", 13f)
                 labels.addView(name); labels.addView(pkg, ui.gap(top = 5)); labels.addView(access, ui.gap(top = 6))
                 addView(labels, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = ui.dp(8) })
-                val configure = ui.button("权限", ButtonKind.SECONDARY) { }
+                val configure = ui.button(getString(R.string.app_permission), ButtonKind.SECONDARY) { }
                 addView(configure, LinearLayout.LayoutParams(-2, -2))
                 tag = AppRow(check, name, pkg, access, configure)
             }
@@ -87,14 +87,14 @@ class AppPermissionsActivity : Activity() {
             holder.access.text = accessDescription(access)
             holder.access.setTextColor(if (access.read || access.operate) ui.success else ui.secondary)
             holder.selection.apply {
-                setOnCheckedChangeListener(null); contentDescription = "选择 ${app.label}（${app.packageName}）。${accessDescription(access)}"
+                setOnCheckedChangeListener(null); contentDescription = getString(R.string.select_app, app.label, app.packageName, accessDescription(access))
                 isChecked = app.packageName in selected
                 setOnCheckedChangeListener { _, checked ->
                     if (checked) selected.add(app.packageName) else selected.remove(app.packageName)
                     updateSelection()
                 }
             }
-            holder.configure.contentDescription = "配置 ${app.label} 的权限。${accessDescription(access)}"
+            holder.configure.contentDescription = getString(R.string.configure_app, app.label, accessDescription(access))
             holder.configure.setOnClickListener { editApp(app.packageName) }
             return row
         }
@@ -111,13 +111,13 @@ class AppPermissionsActivity : Activity() {
         root.addView(stage, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER_HORIZONTAL))
         val enlargedText = resources.configuration.fontScale >= 1.3f
         val heading = ui.row()
-        val back = ui.button(if (enlargedText) "‹" else "‹ 返回", ButtonKind.QUIET) { finish() }.apply { contentDescription = "返回" }
+        val back = ui.button(if (enlargedText) "‹" else getString(R.string.back_with_symbol), ButtonKind.QUIET) { finish() }.apply { contentDescription = getString(R.string.back) }
         heading.addView(back, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = ui.dp(4) })
-        heading.addView(ui.text("应用权限", if (ui.compact || enlargedText) 20f else 24f, true), LinearLayout.LayoutParams(0, -2, 1f))
-        heading.addView(ui.button(if (enlargedText) "+" else "添加包名", ButtonKind.QUIET, R.id.add_app_package) { manualApp() }.apply { contentDescription = "添加包名" }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = ui.dp(8) })
+        heading.addView(ui.text(getString(R.string.app_permissions_title), if (ui.compact || enlargedText) 20f else 24f, true), LinearLayout.LayoutParams(0, -2, 1f))
+        heading.addView(ui.button(if (enlargedText) "+" else getString(R.string.add_package), ButtonKind.QUIET, R.id.add_app_package) { manualApp() }.apply { contentDescription = getString(R.string.add_package) }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = ui.dp(8) })
         body.addView(heading, ui.gap(bottom = if (ui.compact) 2 else 14))
         search = EditText(this).apply {
-            id = R.id.app_permission_search; hint = "搜索应用名或包名"; contentDescription = "搜索应用名或包名"; setSingleLine()
+            id = R.id.app_permission_search; hint = getString(R.string.search_apps); contentDescription = getString(R.string.search_apps); setSingleLine()
             textSize = 16f; setTextColor(ui.ink); setHintTextColor(ui.secondary)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             imeOptions = EditorInfo.IME_ACTION_SEARCH
@@ -142,22 +142,22 @@ class AppPermissionsActivity : Activity() {
         }
         val controls = ui.column().apply { setPadding(ui.dp(12), ui.dp(4), ui.dp(12), ui.dp(8)) }
         val selectionRow = ui.row()
-        selectButton = ui.button("全选搜索结果", ButtonKind.QUIET, R.id.select_filtered_apps) {
+        selectButton = ui.button(getString(R.string.select_filtered), ButtonKind.QUIET, R.id.select_filtered_apps) {
             selected.addAll(filtered.map { it.packageName }); adapter.notifyDataSetChanged(); updateSelection()
         }
-        clearButton = ui.button("清空选择", ButtonKind.QUIET, R.id.clear_selected_apps) {
+        clearButton = ui.button(getString(R.string.clear_selection), ButtonKind.QUIET, R.id.clear_selected_apps) {
             selected.clear(); adapter.notifyDataSetChanged(); updateSelection()
         }
         selectionRow.addView(selectButton, LinearLayout.LayoutParams(0, -2, 1f))
         selectionRow.addView(clearButton, LinearLayout.LayoutParams(0, -2, 1f))
         controls.addView(selectionRow)
-        summary = ui.text("正在读取应用列表…", 13f, tint = ui.secondary).apply {
+        summary = ui.text(getString(R.string.loading_apps), 13f, tint = ui.secondary).apply {
             id = R.id.app_permission_summary; accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
         controls.addView(summary, ui.gap(top = 7, bottom = 9, side = 2))
-        bulkButton = ui.button("批量设置", ButtonKind.PRIMARY, R.id.batch_app_permissions) { batchActions() }
-        allButton = ui.button("一键全部开启", ButtonKind.SECONDARY, R.id.grant_everything) {
-            save("已开启列表中 ${apps.size} 个应用及四项能力；系统授权与暂停状态保持当前设置") {
+        bulkButton = ui.button(getString(R.string.batch_settings), ButtonKind.PRIMARY, R.id.batch_app_permissions) { batchActions() }
+        allButton = ui.button(getString(R.string.enable_all_apps), ButtonKind.SECONDARY, R.id.grant_everything) {
+            save(resources.getQuantityString(R.plurals.enable_all_apps_success_count, apps.size, apps.size)) {
                 prefs.setPermissions(apps.associate { it.packageName to AppAccess(read = true, operate = true) }, Capability.entries.toSet())
                 selected.clear(); selected.addAll(apps.map { it.packageName })
             }
@@ -166,7 +166,7 @@ class AppPermissionsActivity : Activity() {
         controls.addView(allButton, ui.gap())
         scopeNote = ui.text("", 12f, tint = ui.secondary)
         controls.addView(scopeNote, ui.gap(top = 8, bottom = 12, side = 2))
-        emptyState = ui.text("正在读取应用列表…", 16f, tint = ui.secondary).apply {
+        emptyState = ui.text(getString(R.string.loading_apps), 16f, tint = ui.secondary).apply {
             id = R.id.app_permission_empty
             gravity = Gravity.CENTER; setPadding(ui.dp(12), ui.dp(24), ui.dp(12), ui.dp(24))
         }
@@ -192,7 +192,7 @@ class AppPermissionsActivity : Activity() {
                 selected.retainAll(apps.map { it.packageName }.toSet())
                 accesses = prefs.policy().apps; loaded = true; filterApps()
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { summary.text = "应用列表读取失败，请重新打开页面"; emptyState.setText(R.string.catalog_load_error) }
+            catch (_: Exception) { summary.text = getString(R.string.catalog_error); emptyState.setText(R.string.catalog_load_error) }
         }
     }
     override fun onResume() {
@@ -227,46 +227,47 @@ class AppPermissionsActivity : Activity() {
     private fun filterApps() {
         val query = search.text.toString().trim()
         filtered = apps.filter { it.label.contains(query, true) || it.packageName.contains(query, true) }
-        emptyState.text = if (query.isBlank()) "列表中还没有应用\n可通过“添加包名”配置应用。" else "没有匹配的应用\n换个名称、清空搜索，或添加包名。"
+        emptyState.text = if (query.isBlank()) getString(R.string.empty_apps) else getString(R.string.no_matching_apps)
         emptyState.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
         adapter.notifyDataSetChanged(); updateSelection()
     }
     private fun updateSelection() {
         if (loaded) {
             val hidden = selected.size - filtered.count { it.packageName in selected }
-            summary.text = getString(R.string.app_permission_summary, filtered.size, apps.size, selected.size,
+            summary.text = resources.getQuantityString(R.plurals.app_permission_summary_count, filtered.size, filtered.size, apps.size, selected.size,
                 if (hidden > 0) getString(R.string.app_permission_hidden, hidden) else "")
         }
         bulkButton.text = getString(R.string.app_permission_bulk, selected.size)
         bulkButton.isEnabled = loaded && selected.isNotEmpty()
         selectButton.isEnabled = loaded && filtered.isNotEmpty(); clearButton.isEnabled = selected.isNotEmpty(); allButton.isEnabled = loaded
-        scopeNote.text = getString(if (ui.compact) R.string.app_permission_scope_compact else R.string.app_permission_scope, apps.size)
+        scopeNote.text = if (ui.compact) resources.getQuantityString(R.plurals.app_permission_scope_compact_count, apps.size, apps.size)
+        else resources.getQuantityString(R.plurals.app_permission_scope_count, apps.size, apps.size)
     }
     private fun batchActions() {
         val targets = selected.toSet()
-        ui.showDialog(AlertDialog.Builder(this).setTitle("批量设置 ${targets.size} 个应用")
-            .setItems(arrayOf("允许读取（保留操作设置）", "允许操作（保留读取设置）", "读取与操作全部允许", "读取与操作全部禁止")) { _, action ->
-                save("已更新 ${targets.size} 个应用") {
+        ui.showDialog(AlertDialog.Builder(this).setTitle(resources.getQuantityString(R.plurals.batch_title_count, targets.size, targets.size))
+            .setItems(arrayOf(getString(R.string.allow_read_keep_operate), getString(R.string.allow_operate_keep_read), getString(R.string.allow_both), getString(R.string.deny_both))) { _, action ->
+                save(resources.getQuantityString(R.plurals.apps_updated_count, targets.size, targets.size)) {
                     val current = prefs.policy().apps
                     prefs.setApps(targets.associateWith { pkg ->
                         val access = current[pkg] ?: AppAccess()
                         when (action) { 0 -> access.copy(read = true); 1 -> access.copy(operate = true); 2 -> AppAccess(true, true); else -> AppAccess() }
                     })
                 }
-            }.setNegativeButton("取消", null).create())
+            }.setNegativeButton(getString(R.string.cancel), null).create())
     }
     private fun manualApp() {
         val body = ui.modalBody()
-        val field = ui.field("应用包名", "com.example.app", R.id.manual_package)
+        val field = ui.field(getString(R.string.package_name), getString(R.string.package_name_hint), R.id.manual_package)
         field.input.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         body.addView(field)
-        ui.note(body, "可添加未列出的应用、键盘或系统组件。保存前可分别选择读取和操作权限。")
-        val dialog = AlertDialog.Builder(this).setTitle("添加包名").setView(body)
-            .setNegativeButton("取消", null).setPositiveButton("配置", null).create()
+        ui.note(body, getString(R.string.add_package_note))
+        val dialog = AlertDialog.Builder(this).setTitle(getString(R.string.add_package)).setView(body)
+            .setNegativeButton(getString(R.string.cancel), null).setPositiveButton(getString(R.string.configure), null).create()
         ui.showDialog(dialog)
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val pkg = field.input.text.toString().trim()
-            if (!pkg.matches(Regex("[A-Za-z][\\w]*(\\.[\\w]+)+")) || pkg == packageName) { field.error("请输入其他应用的有效包名"); field.input.requestFocus() }
+            if (!pkg.matches(Regex("[A-Za-z][\\w]*(\\.[\\w]+)+")) || pkg == packageName) { field.error(getString(R.string.invalid_package)); field.input.requestFocus() }
             else { dialog.dismiss(); editApp(pkg, showInSearch = true) }
         }
     }
@@ -275,15 +276,15 @@ class AppPermissionsActivity : Activity() {
         val access = prefs.policy().apps[pkg] ?: AppAccess()
         val body = ui.modalBody()
         body.addView(ui.text(pkg, 13f, tint = ui.secondary))
-        val read = ui.toggle("允许读取与截图", "仍需开启对应能力并授予系统权限。", R.id.app_read) { }
-        val operate = ui.toggle("允许打开与操作", "包括点击、输入、滑动与返回。", R.id.app_operate) { }
+        val read = ui.toggle(getString(R.string.allow_read_screenshot), getString(R.string.read_screenshot_note), R.id.app_read) { }
+        val operate = ui.toggle(getString(R.string.allow_open_operate), getString(R.string.operate_note), R.id.app_operate) { }
         read.bind(access.read); operate.bind(access.operate)
         body.addView(read); ui.divider(body); body.addView(operate)
         val dialog = AlertDialog.Builder(this).setTitle(app.label).setView(ui.scroll(body, bottom = 8).apply { isFillViewport = false })
-            .setNegativeButton("取消", null).setPositiveButton("保存", null).create()
+            .setNegativeButton(getString(R.string.cancel), null).setPositiveButton(getString(R.string.save), null).create()
         ui.showDialog(dialog)
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-            if (save("已保存 ${app.label} 的权限") {
+            if (save(getString(R.string.app_saved, app.label)) {
                 prefs.setApp(pkg, AppAccess(read.toggle.isChecked, operate.toggle.isChecked))
                 if (apps.none { it.packageName == pkg }) apps = sorted(apps + app)
                 if (showInSearch) search.setText(pkg)
@@ -295,13 +296,13 @@ class AppPermissionsActivity : Activity() {
             action(); accesses = prefs.policy().apps; filterApps()
             Toast.makeText(this, success, Toast.LENGTH_SHORT).show(); true
         } catch (error: Exception) {
-            ui.showDialog(AlertDialog.Builder(this).setMessage(error.message ?: "保存失败，请重试").setPositiveButton("知道了", null).create()); false
+            ui.showDialog(AlertDialog.Builder(this).setMessage(error.message ?: getString(R.string.save_error)).setPositiveButton(getString(R.string.acknowledge), null).create()); false
         }
     }
     private fun accessDescription(access: AppAccess) = when {
-        access.read && access.operate -> "允许读取 · 允许操作"
-        access.read -> "允许读取 · 禁止操作"
-        access.operate -> "禁止读取 · 允许操作"
-        else -> "禁止读取 · 禁止操作"
+        access.read && access.operate -> getString(R.string.allow_read_operate)
+        access.read -> getString(R.string.allow_read_deny_operate)
+        access.operate -> getString(R.string.deny_read_allow_operate)
+        else -> getString(R.string.deny_read_operate)
     }
 }

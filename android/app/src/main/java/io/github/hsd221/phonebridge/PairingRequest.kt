@@ -26,7 +26,7 @@ class PairingRequest(context: Context) {
                 prefs.identity = BridgeNetwork.pair(url, code, prefs, insecure)
                 BridgeService.start(appContext)
                 completed = true
-            } catch (failure: Exception) { error = failure.message ?: "无法连接 Bridge，请检查网络后重试" }
+            } catch (failure: Exception) { error = failure.message ?: text(R.string.err_bridge_connection_failed) }
             finally { busy = false; changed?.invoke(); scope.cancel() }
         }
     }

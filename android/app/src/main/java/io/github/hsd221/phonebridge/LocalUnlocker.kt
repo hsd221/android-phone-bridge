@@ -51,14 +51,14 @@ class LocalUnlocker internal constructor(
         var attempted = false
         try {
             if (!context.getSystemService(UserManager::class.java).isUserUnlocked) {
-                throw ToolFailure("USER_UNLOCK_REQUIRED", "重启后请先在手机上完成首次解锁")
+                throw ToolFailure("USER_UNLOCK_REQUIRED", text(R.string.err_initial_unlock_required))
             }
             if (!keyguard.isKeyguardLocked && !keyguard.isDeviceLocked && context.getSystemService(PowerManager::class.java).isInteractive) return success("already_unlocked")
             if (keyguard.isKeyguardLocked && store.retryBlocked) {
-                throw ToolFailure("UNLOCK_RETRY_BLOCKED", "上次自动解锁未确认成功，请在手机本地检查并重新允许尝试")
+                throw ToolFailure("UNLOCK_RETRY_BLOCKED", text(R.string.err_unlock_retry_blocked))
             }
             val accessibility = PhoneAccessibilityService.instance
-                ?: throw ToolFailure("ACCESSIBILITY_UNAVAILABLE", "请在系统设置中启用手机工具桥无障碍服务")
+                ?: throw ToolFailure("ACCESSIBILITY_UNAVAILABLE", text(R.string.err_accessibility_required))
             accessibilityInfo = accessibility to accessibility.serviceInfo.flags
             accessibility.serviceInfo = accessibility.serviceInfo.apply {
                 flags = flags or AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
@@ -67,7 +67,7 @@ class LocalUnlocker internal constructor(
             if (context.getSystemService(PowerManager::class.java).isInteractive && bouncerPresent(accessibility)) {
                 // Opening a show-when-locked activity can hide an existing bouncer
                 // and clear a user's partial entry. Do not disturb that surface.
-                credential = store.read() ?: throw ToolFailure("USER_UNLOCK_REQUIRED", "请在手机上完成当前系统解锁")
+                credential = store.read() ?: throw ToolFailure("USER_UNLOCK_REQUIRED", text(R.string.err_current_unlock_required))
                 val root = systemRoot(accessibility, allowInputMethod = credential.kind == UnlockKind.PASSWORD) ?: unsupported()
                 if (entry(root, credential.kind) == null) unsupported()
                 UnlockDiagnostics.stage(UnlockDiagnostics.Stage.WAITING_FOR_BOUNCER)
@@ -90,7 +90,7 @@ class LocalUnlocker internal constructor(
                     delay(100)
                 }
                 credential = store.read()
-                    ?: throw ToolFailure("USER_UNLOCK_REQUIRED", "请在手机上解锁；自动输入需要在本机配置 PIN、密码或图案，指纹与人脸由系统处理")
+                    ?: throw ToolFailure("USER_UNLOCK_REQUIRED", text(R.string.err_local_credential_required))
                 awaitBouncer(accessibility, opened, credential.kind, ::checkAccess) ?: return success("system")
             }
             UnlockDiagnostics.stage(UnlockDiagnostics.Stage.PREFLIGHT)
@@ -114,7 +114,7 @@ class LocalUnlocker internal constructor(
             if (input != null) {
                 input.enter(credential, pinSubmission, ensure = {
                     checkAccess()
-                    if (!prefs.shizukuEnabled) throw ToolFailure("UNLOCK_INTERRUPTED", "Shizuku 增强已关闭，已停止本地输入")
+                    if (!prefs.shizukuEnabled) throw ToolFailure("UNLOCK_INTERRUPTED", text(R.string.err_shizuku_disabled))
                 }, isUnlocked = { !keyguard.isKeyguardLocked && !keyguard.isDeviceLocked })
             } else {
                 when (credential.kind) {
@@ -132,7 +132,7 @@ class LocalUnlocker internal constructor(
                 }
                 delay(100)
             }
-            throw ToolFailure("UNLOCK_FAILED", "未确认解锁成功，已停止自动尝试。请在手机本地检查解锁方式和凭据后重新允许尝试", true)
+            throw ToolFailure("UNLOCK_FAILED", text(R.string.err_unlock_unconfirmed), true)
         } catch (failure: ToolFailure) {
             UnlockDiagnostics.finish(failure.code)
             throw if (attempted && !failure.outcomeUnknown) ToolFailure(failure.code, failure.message, true) else failure
@@ -192,7 +192,7 @@ class LocalUnlocker internal constructor(
         }
         ensure()
         if (!keyguard.isKeyguardLocked && !keyguard.isDeviceLocked) return null
-        if (UnlockActivity.dismissStatus == "cancelled") throw ToolFailure("USER_UNLOCK_REQUIRED", "系统解锁请求已取消，请在手机上处理")
+        if (UnlockActivity.dismissStatus == "cancelled") throw ToolFailure("USER_UNLOCK_REQUIRED", text(R.string.err_system_unlock_cancelled))
         // Existing controls may belong to another lock method or be obstructed. A
         // swipe could submit a partial pattern, so never swipe in that state.
         if (bouncerPresent(accessibility)) unsupported()
@@ -219,7 +219,7 @@ class LocalUnlocker internal constructor(
         }
         val root = waitForBouncer(accessibility, kind, 4000, ensure)
         if (!keyguard.isKeyguardLocked && !keyguard.isDeviceLocked) return null
-        if (root == null) throw ToolFailure("UNLOCK_UI_UNAVAILABLE", "已唤醒并尝试显示验证界面，但未识别到系统解锁键盘；尚未输入凭据，请在手机上处理")
+        if (root == null) throw ToolFailure("UNLOCK_UI_UNAVAILABLE", text(R.string.err_unlock_keyboard_missing))
         onReveal(RevealPhase.FOUND_BOUNCER); ensure()
         return root
     }
@@ -240,12 +240,12 @@ class LocalUnlocker internal constructor(
             }
             delay(100)
         }
-        throw refusal ?: ToolFailure("UNLOCK_UNSUPPORTED", "未能确认系统锁屏窗口，尚未输入凭据，请手动解锁")
+        throw refusal ?: ToolFailure("UNLOCK_UNSUPPORTED", text(R.string.err_lock_screen_unconfirmed))
     }
 
     private fun revealBounds(accessibility: PhoneAccessibilityService): Rect {
         if (!keyguard.isKeyguardLocked || !keyguard.isDeviceLocked || !context.getSystemService(PowerManager::class.java).isInteractive || bouncerPresent(accessibility)) {
-            throw ToolFailure("UNLOCK_INTERRUPTED", "锁屏界面状态已改变，已停止显示解锁键盘")
+            throw ToolFailure("UNLOCK_INTERRUPTED", text(R.string.err_keyguard_reveal_stopped))
         }
         val metrics = accessibility.resources.displayMetrics
         val windows = accessibility.windows.filter { it.displayId == Display.DEFAULT_DISPLAY }
@@ -255,7 +255,7 @@ class LocalUnlocker internal constructor(
             val bounds = Rect().also(window::getBoundsInScreen)
             owner in keyguardPackages && root.isVisibleToUser && window.type != AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY &&
                 bounds.width() >= metrics.widthPixels * .8f && bounds.height() >= metrics.heightPixels * .8f
-        } ?: throw ToolFailure("UNLOCK_UNSUPPORTED", "无法安全确认系统锁屏壁纸窗口，尚未输入凭据，请手动解锁")
+        } ?: throw ToolFailure("UNLOCK_UNSUPPORTED", text(R.string.err_keyguard_wallpaper_unverified))
         val owner = target.root?.packageName?.toString() ?: unsupported()
         val info = context.packageManager.getApplicationInfo(owner, 0)
         if (info.flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) == 0) unsupported()
@@ -267,7 +267,7 @@ class LocalUnlocker internal constructor(
         if (windows.any { window ->
                 window.layer > target.layer && Rect.intersects(swipeBounds, Rect().also(window::getBoundsInScreen)) &&
                     window.root?.packageName?.toString() !in keyguardPackages
-            }) throw ToolFailure("UNLOCK_UNSUPPORTED", "系统锁屏滑动区域被其他窗口覆盖，尚未输入凭据，请在手机上处理")
+            }) throw ToolFailure("UNLOCK_UNSUPPORTED", text(R.string.err_keyguard_swipe_obstructed))
         return bounds
     }
 
@@ -277,7 +277,7 @@ class LocalUnlocker internal constructor(
 
     private fun currentRoot(accessibility: PhoneAccessibilityService, ensure: () -> Unit, allowInputMethod: Boolean = false): AccessibilityNodeInfo {
         ensure()
-        return systemRoot(accessibility, allowInputMethod) ?: throw ToolFailure("UNLOCK_INTERRUPTED", "系统锁屏状态已改变，已停止本地输入")
+        return systemRoot(accessibility, allowInputMethod) ?: throw ToolFailure("UNLOCK_INTERRUPTED", text(R.string.err_local_input_stopped))
     }
 
     private suspend fun enterPin(accessibility: PhoneAccessibilityService, value: String, submission: PinSubmission, ensure: () -> Unit) {
@@ -292,12 +292,12 @@ class LocalUnlocker internal constructor(
                         // Recheck emptiness at the first action, after the latch
                         // was saved. Do not append to a user's intervening input.
                         if (preflight(root, UnlockCredential(UnlockKind.PIN, value)) != PinSubmission.AUTO_CONFIRM) {
-                            throw ToolFailure("UNLOCK_INTERRUPTED", "系统锁屏状态已改变，已停止本地输入")
+                            throw ToolFailure("UNLOCK_INTERRUPTED", text(R.string.err_local_input_stopped))
                         }
                     } else {
                         val deleteActionable = node(root, "delete_button")?.isClickable == true
                         if (!PinAutoConfirmPolicy.canContinue(ui.pinEmptyControls(root), deleteActionable)) {
-                            throw ToolFailure("UNLOCK_INTERRUPTED", "系统锁屏状态已改变，已停止本地输入")
+                            throw ToolFailure("UNLOCK_INTERRUPTED", text(R.string.err_local_input_stopped))
                         }
                     }
                 }
@@ -306,14 +306,14 @@ class LocalUnlocker internal constructor(
                     unsupported(UnlockDiagnostics.Reason.DIGIT_CONTROL_UNAVAILABLE)
                 }
                 ensure()
-                if (!key.performAction(AccessibilityNodeInfo.ACTION_CLICK)) throw ToolFailure("UNLOCK_INTERRUPTED", "系统拒绝本地 PIN 输入")
+                if (!key.performAction(AccessibilityNodeInfo.ACTION_CLICK)) throw ToolFailure("UNLOCK_INTERRUPTED", text(R.string.err_pin_input_rejected))
                 entered = true
             },
             confirm = {
                 val root = currentRoot(accessibility, ensure)
                 if (entry(root, UnlockKind.PIN) == null) unsupported(UnlockDiagnostics.Reason.ENTRY_UNAVAILABLE)
                 ensure()
-                if (node(root, "key_enter")?.performAction(AccessibilityNodeInfo.ACTION_CLICK) != true) throw ToolFailure("UNLOCK_INTERRUPTED", "系统拒绝本地 PIN 确认")
+                if (node(root, "key_enter")?.performAction(AccessibilityNodeInfo.ACTION_CLICK) != true) throw ToolFailure("UNLOCK_INTERRUPTED", text(R.string.err_pin_confirm_rejected))
             },
         )
     }
@@ -326,12 +326,12 @@ class LocalUnlocker internal constructor(
         ensure()
         if (!field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
-            })) throw ToolFailure("UNLOCK_INTERRUPTED", "系统拒绝本地密码输入")
+            })) throw ToolFailure("UNLOCK_INTERRUPTED", text(R.string.err_password_input_rejected))
         ensure()
         if (!keyguard.isKeyguardLocked && !keyguard.isDeviceLocked) return
         val fresh = entry(currentRoot(accessibility, ensure, allowInputMethod = true), UnlockKind.PASSWORD) ?: unsupported()
         ensure()
-        if (!fresh.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)) throw ToolFailure("UNLOCK_INTERRUPTED", "系统拒绝本地密码确认")
+        if (!fresh.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)) throw ToolFailure("UNLOCK_INTERRUPTED", text(R.string.err_password_confirm_rejected))
     }
 
     private suspend fun enterPattern(accessibility: PhoneAccessibilityService, value: String, ensure: () -> Unit) {
@@ -364,6 +364,6 @@ class LocalUnlocker internal constructor(
             }, null)
             if (!accepted && continuation.isActive) continuation.resume(false)
         }
-        if (!completed) throw ToolFailure("UNLOCK_INTERRUPTED", "系统取消了本地解锁手势")
+        if (!completed) throw ToolFailure("UNLOCK_INTERRUPTED", text(R.string.err_unlock_gesture_cancelled))
     }
 }

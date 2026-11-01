@@ -40,10 +40,10 @@ class UnlockSettingsActivity : Activity() {
         prefs = BridgePrefs(this); store = LocalUnlockStore(this); ui = BridgeUi(this)
         val body = ui.column()
         body.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
-        ui.addButton(body, "‹ 返回", ButtonKind.QUIET) { finish() }
-        ui.heading(body, "本地解锁", "凭据只保存在这台手机，不发送给 Bridge 或 AI。")
-        val access = ui.section(body, "单独授权", "同时需要“操作应用”能力与无障碍服务。开启 Shizuku 增强后，连接可用时优先使用；未连接则使用无障碍。暂停操作或暂停全部访问会停止解锁；一键全开不会开启此授权。")
-        enabled = ui.toggle("允许远程请求解锁", "允许已配对的 AI 唤醒并使用本地配置解锁手机。", R.id.unlock_enabled) { value ->
+        ui.addButton(body, getString(R.string.back_with_symbol), ButtonKind.QUIET) { finish() }
+        ui.heading(body, getString(R.string.local_unlock_title), getString(R.string.local_unlock_subtitle))
+        val access = ui.section(body, getString(R.string.separate_authorization), getString(R.string.separate_authorization_detail))
+        enabled = ui.toggle(getString(R.string.allow_remote_unlock), getString(R.string.allow_remote_unlock_detail), R.id.unlock_enabled) { value ->
             save {
                 requireLocalUser()
                 prefs.unlockEnabled = value
@@ -52,18 +52,18 @@ class UnlockSettingsActivity : Activity() {
         access.addView(enabled)
         status = ui.text("", 14f, true).apply { id = R.id.unlock_status }
         access.addView(status, ui.gap(bottom = 10))
-        val credential = ui.section(body, "在手机上配置凭据", "选择与系统锁屏相同的方式。此设置不会修改系统锁屏。无密码或受信任设备可不保存凭据；指纹、人脸仍由系统处理，需要时请在手机上完成。")
+        val credential = ui.section(body, getString(R.string.configure_credentials), getString(R.string.configure_credentials_detail))
         val modes = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
         UnlockKind.entries.forEach { mode ->
             modes.addView(RadioButton(this).apply {
                 id = when (mode) { UnlockKind.PIN -> R.id.unlock_kind_pin; UnlockKind.PASSWORD -> R.id.unlock_kind_password; UnlockKind.PATTERN -> R.id.unlock_kind_pattern }
-                text = mode.label; minHeight = ui.dp(48); setTextColor(ui.ink)
+                text = getString(mode.labelRes); minHeight = ui.dp(48); setTextColor(ui.ink)
                 isSaveEnabled = false
                 setOnCheckedChangeListener { _, checked -> if (checked) { kind = mode; updateKind() } }
             })
         }
         credential.addView(modes)
-        field = ui.field("PIN / 密码", "输入当前锁屏凭据", R.id.unlock_credential)
+        field = ui.field(getString(R.string.pin_password), getString(R.string.credential_hint), R.id.unlock_credential)
         field.input.apply {
             isSaveEnabled = false
             importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
@@ -71,7 +71,7 @@ class UnlockSettingsActivity : Activity() {
         }
         credential.addView(field)
         patternGrid = ui.column()
-        patternGrid.addView(ui.text("按解锁顺序依次点选；跨过的中点会按 Android 规则自动加入。", 14f))
+        patternGrid.addView(ui.text(getString(R.string.pattern_note), 14f))
         for (row in 0..2) {
             val line = ui.row()
             for (column in 0..2) {
@@ -80,7 +80,7 @@ class UnlockSettingsActivity : Activity() {
                     sequence = PatternSequence.normalize(sequence + index)
                     bindPattern()
                 }.apply {
-                    contentDescription = "图案节点 $index"
+                    contentDescription = getString(R.string.pattern_node, index)
                     isSaveEnabled = false
                 }
                 points.add(point)
@@ -90,22 +90,22 @@ class UnlockSettingsActivity : Activity() {
         }
         patternState = ui.text("", 14f).apply { id = R.id.unlock_pattern_state }
         patternGrid.addView(patternState, ui.gap(top = 8))
-        ui.addButton(patternGrid, "重新选择图案", ButtonKind.QUIET, R.id.unlock_pattern_clear) { sequence = ""; bindPattern() }
+        ui.addButton(patternGrid, getString(R.string.clear_pattern), ButtonKind.QUIET, R.id.unlock_pattern_clear) { sequence = ""; bindPattern() }
         credential.addView(patternGrid)
-        ui.addButton(credential, "保存到本机", ButtonKind.PRIMARY, R.id.unlock_save) {
+        ui.addButton(credential, getString(R.string.save_local), ButtonKind.PRIMARY, R.id.unlock_save) {
             save {
                 requireLocalUser()
                 val value = UnlockCredential(kind, if (kind == UnlockKind.PATTERN) sequence else field.input.text.toString())
                 store.save(value)
                 clearInput()
-                Toast.makeText(this, "已加密保存在本机", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, getString(R.string.credential_saved), Toast.LENGTH_LONG).show()
             }
         }
-        val recovery = ui.section(body, "失败与恢复", "仅识别支持的系统锁屏。输入失败、中断或结果不明后会禁止继续自动输入，请手动解锁并在这里检查配置。重启后的首次解锁需手动完成。")
-        ui.addButton(recovery, "检查后重新允许尝试", viewId = R.id.unlock_reset_attempt) {
+        val recovery = ui.section(body, getString(R.string.recovery), getString(R.string.recovery_detail))
+        ui.addButton(recovery, getString(R.string.reset_attempt), viewId = R.id.unlock_reset_attempt) {
             save { requireLocalUser(); store.allowNextAttempt() }
         }
-        ui.addButton(recovery, "删除本地凭据并关闭授权", ButtonKind.DANGER, R.id.unlock_delete) {
+        ui.addButton(recovery, getString(R.string.delete_credentials), ButtonKind.DANGER, R.id.unlock_delete) {
             save { requireLocalUser(); prefs.unlockEnabled = false; store.clear(); clearInput() }
         }
         val root = FrameLayout(this)
@@ -121,7 +121,7 @@ class UnlockSettingsActivity : Activity() {
     }
     override fun onPause() { clearInput(); super.onPause() }
     private fun requireLocalUser() {
-        check(!getSystemService(KeyguardManager::class.java).isKeyguardLocked && getSystemService(UserManager::class.java).isUserUnlocked) { "请先在手机上解锁后配置" }
+        check(!getSystemService(KeyguardManager::class.java).isKeyguardLocked && getSystemService(UserManager::class.java).isUserUnlocked) { getString(R.string.unlock_user_required) }
     }
     private fun clearInput() { field.input.text.clear(); sequence = ""; bindPattern() }
     private fun updateKind() {
@@ -137,20 +137,20 @@ class UnlockSettingsActivity : Activity() {
             button.text = if (order >= 0) "${index + 1} · ${order + 1}" else (index + 1).toString()
             button.isEnabled = order < 0
         }
-        patternState.text = getString(R.string.unlock_pattern_count, sequence.length)
+        patternState.text = resources.getQuantityString(R.plurals.unlock_pattern_points, sequence.length, sequence.length)
     }
     private fun refresh() {
         enabled.bind(prefs.unlockEnabled)
         status.text = when {
-            store.retryBlocked -> "自动输入已阻止 · 请检查配置后重新允许尝试"
-            store.configured -> "已保存本地加密凭据"
-            else -> "未保存凭据 · 可唤醒并请求系统解锁"
+            store.retryBlocked -> getString(R.string.unlock_blocked)
+            store.configured -> getString(R.string.unlock_saved)
+            else -> getString(R.string.unlock_not_saved)
         }
     }
     private fun save(action: () -> Unit) {
         runCatching(action).onFailure {
             // Never reflect crypto/input exceptions, which could include sensitive data.
-            val message = if (it is IllegalArgumentException) "凭据格式无效：PIN 为 4–16 位数字；密码为 4–64 个字符；图案至少 4 个点" else "无法保存，请确认手机已解锁后重试"
+            val message = if (it is IllegalArgumentException) getString(R.string.credential_format_error) else getString(R.string.unlock_save_error)
             Toast.makeText(this, message, Toast.LENGTH_LONG).show()
         }
         refresh()
