@@ -186,7 +186,7 @@ class BridgeService : Service() {
         val deadline = message.getLong("expiresAt")
         val args = message.getJSONObject("args")
         var started = false
-        val operation = tool in setOf("phone_unlock", "phone_open_app", "phone_tap", "phone_swipe", "phone_input", "phone_back")
+        val operation = tool in setOf("phone_unlock", "phone_open_app", "phone_tap", "phone_swipe", "phone_input", "phone_back", "phone_set_clipboard")
         val job = scope.launch(start = CoroutineStart.LAZY) {
             val ensure = {
                 coroutineContext.ensureActive()

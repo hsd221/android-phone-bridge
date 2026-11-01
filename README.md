@@ -37,9 +37,9 @@ Anthropic 的 Computer Use 让我们看到了大模型直接与操作系统图�
 
 ### 核心能力一览
 
-- **10 项核心 MCP 工具**：
-  - 感知：设备状态 (`phone_status`)、实时定位 (`phone_location`)、界面层级 (`phone_ui`)、屏幕截图 (`phone_screenshot`)
-  - 操作：本地解锁 (`phone_unlock`)、启动应用 (`phone_open_app`)、模拟点击 (`phone_tap`)、手势滑动 (`phone_swipe`)、文本输入 (`phone_input`)、系统返回 (`phone_back`)
+- **16 项 MCP 工具**：
+  - 感知：设备状态 (`phone_status`)、设备信息 (`phone_device_info`)、应用列表 (`phone_apps`)、实时定位 (`phone_location`)、界面层级 (`phone_ui`)、屏幕截图 (`phone_screenshot`)、活动通知 (`phone_notifications`)、剪贴板 (`phone_clipboard`)、媒体元数据 (`phone_media`)
+  - 操作：本地解锁 (`phone_unlock`)、启动应用 (`phone_open_app`)、模拟点击 (`phone_tap`)、手势滑动 (`phone_swipe`)、文本输入 (`phone_input`)、系统返回 (`phone_back`)、写入剪贴板 (`phone_set_clipboard`)
 - **可选本地解锁**：
   - 单独开启后，可唤醒手机并请求系统解除锁屏，支持在手机端配置数字 PIN、文字密码或图案；
   - 锁屏凭据仅在手机本地加密保存与使用，解锁工具无参数，Bridge 和 AI 不接收凭据；
@@ -53,7 +53,8 @@ Anthropic 的 Computer Use 让我们看到了大模型直接与操作系统图�
   - 手机主动发起出站 WebSocket 长连接，断网自动退避重连；
   - 手机凭据基于 Android Keystore (AES-GCM) 硬件级加密保存，Bridge 端仅存储散列值；
   - 请求包含唯一 ID 与超时时间戳，超时或断网绝不重放副作用操作。
-- **可选 Shizuku 增强**：非 Root 模式下支持显式应用启动和本地解锁；解锁输入前未连接时回退无障碍，输入后断开则停止并保留重试阻止。
+- **可选 ADB 等效增强**：启用非 Root Shizuku 后，坐标点击、滑动、文本输入和返回会先走受限的 ADB 等效输入通道；通道在输入前不可用时回退无障碍，输入后失败不会重放。应用启动和本地解锁继续使用既有 Shizuku 路径。
+- **系统授权状态可见**：通知读取、图片/视频读取和 ADB 输入等独占模式会在设置页显示当前可用性；缺少授权时工具返回明确错误，不会静默绕过系统权限。
 
 ---
 

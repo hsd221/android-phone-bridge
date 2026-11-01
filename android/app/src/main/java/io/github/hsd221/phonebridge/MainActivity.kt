@@ -204,6 +204,12 @@ class MainActivity : Activity() {
         toolSummary = ui.text("", 13f, true, ui.secondary)
         tools.addView(toolSummary, ui.gap(top = 12, bottom = 4))
         val specs = listOf(
+            Triple("phone_device_info", getString(R.string.tool_device_info), getString(R.string.tool_device_info_detail)),
+            Triple("phone_apps", getString(R.string.tool_apps), getString(R.string.tool_apps_detail)),
+            Triple("phone_notifications", getString(R.string.tool_notifications), getString(R.string.tool_notifications_detail)),
+            Triple("phone_clipboard", getString(R.string.tool_clipboard), getString(R.string.tool_clipboard_detail)),
+            Triple("phone_set_clipboard", getString(R.string.tool_set_clipboard), getString(R.string.tool_set_clipboard_detail)),
+            Triple("phone_media", getString(R.string.tool_media), getString(R.string.tool_media_detail)),
             Triple("phone_location", getString(R.string.tool_location), getString(R.string.tool_location_detail)),
             Triple("phone_ui", getString(R.string.tool_ui), getString(R.string.tool_ui_detail)),
             Triple("phone_screenshot", getString(R.string.tool_screenshot), getString(R.string.tool_screenshot_detail)),
@@ -215,6 +221,7 @@ class MainActivity : Activity() {
             Triple("phone_unlock", getString(R.string.tool_unlock), getString(R.string.tool_unlock_detail)),
         )
         val ids = listOf(
+            R.id.tool_device_info, R.id.tool_apps, R.id.tool_notifications, R.id.tool_clipboard, R.id.tool_set_clipboard, R.id.tool_media,
             R.id.tool_location, R.id.tool_ui, R.id.tool_screenshot, R.id.tool_open_app,
             R.id.tool_tap, R.id.tool_swipe, R.id.tool_input, R.id.tool_back, R.id.tool_unlock,
         )
@@ -237,7 +244,7 @@ class MainActivity : Activity() {
             "phone_screenshot" to R.id.cap_screenshot,
             "phone_open_app" to R.id.cap_operate,
         ).forEach { (tool, id) ->
-            val alias = Switch(this).apply {
+            val alias = Switch(this@MainActivity).apply {
                 this.id = id; visibility = View.GONE; isSaveEnabled = false
                 setOnClickListener { toolRows[tool]?.toggle?.performClick() }
             }
@@ -276,9 +283,18 @@ class MainActivity : Activity() {
         }
         permissionRow(essential, "backgroundLocation", getString(R.string.permission_background_location), R.id.system_background_location_status) { openAppSettings() }
         permissionRow(essential, "locationService", getString(R.string.permission_location_service), R.id.system_location_service_status) { openSettings(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
-        permissionRow(essential, "notifications", getString(R.string.permission_notifications), R.id.system_notification_status, last = true) {
+        permissionRow(essential, "notifications", getString(R.string.permission_notifications), R.id.system_notification_status) {
             if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 11)
             else openNotificationSettings()
+        }
+        permissionRow(essential, "notificationAccess", getString(R.string.permission_notification_access), R.id.system_notification_access_status) {
+            openSettings(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        }
+        permissionRow(essential, "mediaImages", getString(R.string.permission_media_images), R.id.system_media_images_status) {
+            requestMediaPermissions(images = true, videos = false)
+        }
+        permissionRow(essential, "mediaVideos", getString(R.string.permission_media_videos), R.id.system_media_videos_status, last = true) {
+            requestMediaPermissions(images = false, videos = true)
         }
         val background = ui.section(this, getString(R.string.background_operation), getString(R.string.background_operation_detail))
         permissionRow(background, "battery", getString(R.string.battery_optimization), R.id.system_battery_status) { openSettings(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
@@ -288,6 +304,10 @@ class MainActivity : Activity() {
         shizukuToggle = ui.toggle(getString(R.string.shizuku_enhancement), getString(R.string.shizuku_enhancement_detail), R.id.shizuku_enabled) { saveSettings { prefs.shizukuEnabled = it } }
         enhanced.addView(shizukuToggle); ui.divider(enhanced)
         permissionRow(enhanced, "shizuku", "Shizuku", R.id.system_shizuku_status, last = true) {
+            runCatching { ShizukuSupport(this@MainActivity).requestPermission() }.onFailure { message(it.message ?: getString(R.string.authorization_failed)) }
+        }
+        val execution = ui.section(this, getString(R.string.execution_modes), getString(R.string.execution_modes_detail))
+        permissionRow(execution, "adb", getString(R.string.permission_adb), R.id.system_adb_status, last = true) {
             runCatching { ShizukuSupport(this@MainActivity).requestPermission() }.onFailure { message(it.message ?: getString(R.string.authorization_failed)) }
         }
         ui.note(this, getString(R.string.app_version_footer, BuildConfig.VERSION_NAME, Build.VERSION.RELEASE))
@@ -484,6 +504,14 @@ class MainActivity : Activity() {
     }
     private fun openAppSettings() { openSettings(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) }
     private fun openNotificationSettings() { openSettings(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)) }
+    private fun requestMediaPermissions(images: Boolean, videos: Boolean) {
+        val permissions = if (Build.VERSION.SDK_INT >= 33) buildList {
+            if (images) add(Manifest.permission.READ_MEDIA_IMAGES)
+            if (videos) add(Manifest.permission.READ_MEDIA_VIDEO)
+        } else listOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+        if (permissions.isEmpty()) return
+        requestPermissions(permissions.toTypedArray(), 12)
+    }
     private fun openSettings(intent: Intent) { runCatching { startActivity(intent) }.onFailure { message(getString(R.string.settings_entry_error)) } }
     private fun message(value: String) { ui.showDialog(AlertDialog.Builder(this).setMessage(value).setPositiveButton(getString(R.string.acknowledge), null).create()) }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {

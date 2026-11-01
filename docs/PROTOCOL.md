@@ -128,8 +128,13 @@ Bridge 将来自 MCP 的工具调用封装为 JSON 请求包发送给手机端�
 
 ### 2. 工具列表与坐标体系
 
-协议目前支持 10 项核心工具（具体参数详见 `bridge/src/protocol.ts`）：
+协议目前支持 16 项核心工具（具体参数详见 `bridge/src/protocol.ts`）：
 - `phone_status`：查询设备连接状态、Android 系统版本、两级暂停标志、逐工具权限、按应用授权清单及 Shizuku 运行状态。`tools` 是以 `phone_*` 为键的逐项授权结果；`capabilities` 作为旧客户端兼容字段保留。`appVersion` 与 `appVersionCode` 标识手机 APK 版本，便于确认升级；`screen` 包含亮屏、键盘锁、设备锁与首解状态；`unlock` 包含独立授权、是否配置本地凭据、是否阻止重试及固定的最近尝试状态，不包含凭据、节点或屏幕内容。
+- `phone_device_info`：返回型号、Android 版本、安全补丁、电量、充电状态、屏幕尺寸、密度、语言与时区。
+- `phone_apps`：列出可启动应用及版本；`includeSystem` 为 `true` 时包含系统应用。仅返回系统可见的启动入口，不读取应用私有数据。
+- `phone_notifications`：读取活动通知标题和正文摘要。必须启用通知访问服务，并且通知所属应用已开放读取权限。
+- `phone_clipboard` / `phone_set_clipboard`：读取或替换文本剪贴板，分别受 Android 剪贴板隐私和工具/操作授权控制。
+- `phone_media`：按 `images`、`videos` 或 `all` 列出共享媒体元数据；必须授予对应 Android 媒体读取权限，不返回媒体内容。
 - `phone_unlock`：空参数 `{}`，唤醒并使用手机本地配置请求解锁。需要 `phone_unlock` 工具授权及独立解锁授权，受两级暂停控制。开启全部工具不会开启此授权。PIN、密码与图案不属于协议字段，任何额外参数都会被拒绝。成功返回 `unlocked: true`、`path` 与屏幕状态；`path` 区分 `already_unlocked`、`system`、`local_credential` 和 `shizuku`。Shizuku 未连接或输入前不可用时可回退无障碍，已开始凭据输入则不切换路径重试；需要人工或系统不支持时明确返回错误，不能盲目重试。
 - `phone_location`：获取设备当前定位（经纬度、精度及时间戳）。
 - `phone_ui`：获取当前可见窗口的无障碍节点树与文本内容。
@@ -139,6 +144,8 @@ Bridge 将来自 MCP 的工具调用封装为 JSON 请求包发送给手机端�
 - `phone_swipe`：指定起始与终点坐标模拟滑动。
 - `phone_input`：向当前聚焦的文本框输入字符。
 - `phone_back`：触发系统物理返回键。
+
+坐标点击、滑动、无节点文本输入和返回会先使用受限的 ADB 等效输入通道（非 Root Shizuku shell UID 2000）；通道在动作开始前不可用时才回退到无障碍。节点操作、无法安全编码的多行输入和已开始但结果不明的动作不会换路重放。`phone_status.permissions` 与设置页显示 `adbInput`、`notificationAccess`、`mediaImages` 和 `mediaVideos` 的实际状态。
 
 `unlock.lastAttempt` 为 `null` 或包含以下六个固定状态字段的对象：`stage`（`checking`、`waking`、`waiting_for_bouncer`、`waiting_for_keyguard`、`revealing`、`preflight`、`entering_credential`、`verifying`）、`outcome`（`RUNNING`、`SUCCESS` 或解锁/权限/取消错误码）、`systemDismiss`（`not_requested`、`wake_only`、`system`）、`revealAttempted`、`credentialAttempted` 与 `reason`。`reason` 为 `none`、`unrecognized`、`container_unavailable`、`entry_unavailable`、`entry_not_protected`、`entry_not_editable`、`entry_not_empty`、`entry_empty_state_unknown`、`digit_control_unavailable`、`confirm_control_unavailable`、`auto_confirm_unverified`、`password_action_unavailable` 、`pattern_bounds_invalid`、`back_control_missing`、`back_control_hidden`、`back_control_disabled`、`back_control_ambiguous` 或 `back_control_not_actionable`。它只存在手机进程内存中，关闭解锁授权或解除配对时清空；不包含错误正文、节点内容、输入长度与凭据。
 

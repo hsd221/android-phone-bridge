@@ -65,6 +65,19 @@ object SystemPermissions {
                 !shizuku.optBoolean("available") -> context.getString(R.string.shizuku_unsupported)
                 else -> context.getString(R.string.shizuku_available)
             }, shizuku.optBoolean("available")),
+            "adb" to PermissionState(when {
+                shizuku.optBoolean("available") -> context.getString(R.string.adb_available)
+                else -> context.getString(R.string.adb_unavailable)
+            }, shizuku.optBoolean("available")),
+            "notificationAccess" to PermissionState(
+                if (PhoneNotificationService.instance != null) context.getString(R.string.notification_access_available)
+                else context.getString(R.string.notification_access_unavailable), PhoneNotificationService.instance != null),
+            "mediaImages" to PermissionState(
+                if (if (Build.VERSION.SDK_INT >= 33) granted(Manifest.permission.READ_MEDIA_IMAGES) else granted(Manifest.permission.READ_EXTERNAL_STORAGE)) context.getString(R.string.permission_allowed)
+                else context.getString(R.string.media_permission_unavailable), if (Build.VERSION.SDK_INT >= 33) granted(Manifest.permission.READ_MEDIA_IMAGES) else granted(Manifest.permission.READ_EXTERNAL_STORAGE)),
+            "mediaVideos" to PermissionState(
+                if (if (Build.VERSION.SDK_INT >= 33) granted(Manifest.permission.READ_MEDIA_VIDEO) else granted(Manifest.permission.READ_EXTERNAL_STORAGE)) context.getString(R.string.permission_allowed)
+                else context.getString(R.string.media_permission_unavailable), if (Build.VERSION.SDK_INT >= 33) granted(Manifest.permission.READ_MEDIA_VIDEO) else granted(Manifest.permission.READ_EXTERNAL_STORAGE)),
         )
     }
 }

@@ -34,10 +34,14 @@
     <item type="id" name="system_background_location_status" />
     <item type="id" name="system_location_service_status" />
     <item type="id" name="system_notification_status" />
+    <item type="id" name="system_notification_access_status" />
+    <item type="id" name="system_media_images_status" />
+    <item type="id" name="system_media_videos_status" />
     <item type="id" name="system_battery_status" />
     <item type="id" name="system_background_status" />
     <item type="id" name="system_autostart_status" />
     <item type="id" name="system_shizuku_status" />
+    <item type="id" name="system_adb_status" />
     <item type="id" name="nav_connection" />
     <item type="id" name="nav_access" />
     <item type="id" name="nav_settings" />
@@ -53,6 +57,12 @@
     <item type="id" name="cap_screenshot" />
     <item type="id" name="cap_operate" />
     <item type="id" name="tool_location" />
+    <item type="id" name="tool_device_info" />
+    <item type="id" name="tool_apps" />
+    <item type="id" name="tool_notifications" />
+    <item type="id" name="tool_clipboard" />
+    <item type="id" name="tool_set_clipboard" />
+    <item type="id" name="tool_media" />
     <item type="id" name="tool_ui" />
     <item type="id" name="tool_screenshot" />
     <item type="id" name="tool_open_app" />

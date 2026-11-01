@@ -54,4 +54,32 @@ class ShizukuSupport(private val context: Context) {
             return JSONObject().put("accepted", true).put("path", "shizuku")
         } finally { connection?.let { runCatching { Shizuku.unbindUserService(args, it, true) } } }
     }
+
+    /** Execute one fixed ADB-equivalent primitive through a shell-UID UserService. */
+    suspend fun input(action: (IAdbTools) -> Int, ensure: () -> Unit): JSONObject? {
+        if (!status().optBoolean("available")) return null
+        val args = Shizuku.UserServiceArgs(ComponentName(context, ShizukuAdbService::class.java))
+            .daemon(false).processNameSuffix("adb-input").version(1)
+        var connection: ServiceConnection? = null
+        try {
+            val adb = withTimeout(5000) {
+                suspendCancellableCoroutine<IAdbTools> { continuation ->
+                    connection = object : ServiceConnection {
+                        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+                            if (continuation.isActive) continuation.resume(IAdbTools.Stub.asInterface(binder))
+                        }
+                        override fun onServiceDisconnected(name: ComponentName?) {
+                            if (continuation.isActive) continuation.resumeWithException(ToolFailure("SHIZUKU_UNAVAILABLE", text(R.string.err_shizuku_disconnected)))
+                        }
+                    }
+                    Shizuku.bindUserService(args, connection!!)
+                }
+            }
+            ensure()
+            if (adb.uid() != 2000) throw ToolFailure("SHIZUKU_UNAVAILABLE", text(R.string.err_shizuku_nonroot_only))
+            val result = withContext(Dispatchers.IO) { ensure(); action(adb) }
+            if (result != 0) throw ToolFailure("ACTION_REJECTED", text(R.string.err_adb_input_failed, result), outcomeUnknown = result == -4)
+            return JSONObject().put("accepted", true).put("path", "adb")
+        } finally { connection?.let { runCatching { Shizuku.unbindUserService(args, it, true) } } }
+    }
 }

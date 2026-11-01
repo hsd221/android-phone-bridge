@@ -5,6 +5,12 @@ export const packageName = z.string().regex(/^[a-zA-Z][\w]*(\.[\w]+)+$/).max(255
 const point = z.number().int().min(0).max(16384);
 export const toolInputs = {
   phone_status: z.object({}).strict(),
+  phone_device_info: z.object({}).strict(),
+  phone_apps: z.object({ includeSystem: z.boolean().default(false) }).strict(),
+  phone_notifications: z.object({ maxItems: z.number().int().min(1).max(100).default(50) }).strict(),
+  phone_clipboard: z.object({}).strict(),
+  phone_set_clipboard: z.object({ text: z.string().max(10000) }).strict(),
+  phone_media: z.object({ kind: z.enum(['images', 'videos', 'all']).default('all'), limit: z.number().int().min(1).max(100).default(50) }).strict(),
   phone_unlock: z.object({}).strict(),
   phone_location: z.object({ timeoutMs: z.number().int().min(1000).max(20000).default(15000) }).strict(),
   phone_ui: z.object({ maxNodes: z.number().int().min(1).max(500).default(300) }).strict(),
@@ -21,6 +27,12 @@ export const toolInputs = {
 export type ToolName = keyof typeof toolInputs;
 export const toolDescriptions: Record<ToolName, string> = {
   phone_status: 'Report phone connectivity, permissions, pause state, screen lock state, and optional Shizuku availability.',
+  phone_device_info: 'Read device model, Android version, battery, display, locale, and time zone information.',
+  phone_apps: 'List installed launchable applications and their versions. System packages are hidden unless requested.',
+  phone_notifications: 'Read active notifications after the user enables the notification access service and authorizes their apps.',
+  phone_clipboard: 'Read the current clipboard text when Android allows clipboard access.',
+  phone_set_clipboard: 'Replace the clipboard text. Android may show its normal clipboard privacy notice.',
+  phone_media: 'List recent image and video metadata from shared media after the corresponding media permission is granted.',
   phone_unlock: 'Wake and unlock the phone using only credentials configured locally on that phone. Requires separate phone-side opt-in and operation permission. Takes no PIN, password, or pattern. Never automatically retry a failed unlock; biometric-only or unsupported lock screens require the user.',
   phone_location: 'Get a fresh location on demand. Requires phone-side permission; may return approximate location.',
   phone_ui: 'Read the current authorized visible UI. Node IDs expire after another UI read, UI change, or reconnect. Passwords are redacted.',
@@ -41,4 +53,4 @@ export function failure(code: string, message: string, outcomeUnknown = false): 
   return { ok: false, error: { code, message, ...(outcomeUnknown ? { outcomeUnknown } : {}) } };
 }
 export function isTool(name: string): name is ToolName { return Object.hasOwn(toolInputs, name); }
-export const isOperation = (name: ToolName) => ['phone_unlock', 'phone_open_app', 'phone_tap', 'phone_swipe', 'phone_input', 'phone_back'].includes(name);
+export const isOperation = (name: ToolName) => ['phone_unlock', 'phone_open_app', 'phone_tap', 'phone_swipe', 'phone_input', 'phone_back', 'phone_set_clipboard'].includes(name);
