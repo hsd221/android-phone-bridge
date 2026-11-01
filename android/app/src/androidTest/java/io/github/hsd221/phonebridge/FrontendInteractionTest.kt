@@ -1,5 +1,6 @@
 package io.github.hsd221.phonebridge
 
+import android.animation.ValueAnimator
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Bitmap
@@ -340,10 +341,18 @@ class FrontendInteractionTest {
             val event = MotionEvent.obtain(now, now, action, button.width / 2f, button.height / 2f, 0)
             try { assertTrue(button.dispatchTouchEvent(event)) } finally { event.recycle() }
         }
+        fun awaitAnimationsEnabled(expected: Boolean) {
+            eventually("Animator setting did not propagate to the app: enabled=$expected") {
+                var enabled = false
+                instrumentation.runOnMainSync { enabled = ValueAnimator.areAnimatorsEnabled() }
+                enabled == expected
+            }
+        }
         try {
             shell("settings put global animator_duration_scale 1")
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 instrumentation.waitForIdleSync()
+                awaitAnimationsEnabled(true)
                 val pressed = CountDownLatch(1)
                 val pressedAt = AtomicLong()
                 val pressSettled = CountDownLatch(1)
@@ -385,6 +394,7 @@ class FrontendInteractionTest {
                     assertEquals("Accessibility click should stay immediate", 1f, activity.findViewById<Button>(R.id.nav_access).scaleX, 0f)
                 }
                 shell("settings put global animator_duration_scale 0")
+                awaitAnimationsEnabled(false)
                 scenario.onActivity { activity ->
                     motion(activity.findViewById(R.id.nav_settings), MotionEvent.ACTION_DOWN)
                     assertEquals("Remove animations still scaled on press", 1f, activity.findViewById<Button>(R.id.nav_settings).scaleX, 0f)
