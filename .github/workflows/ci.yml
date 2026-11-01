@@ -46,10 +46,13 @@ jobs:
         include:
           - api: 35
             target: default
+            graphics: -gpu swiftshader_indirect
           - api: 36
             target: google_apis
+            graphics: -gpu swiftshader -feature GLDirectMem -feature HasSharedSlotsHostMemoryAllocator
           - api: '36.1'
             target: google_apis
+            graphics: -gpu swiftshader -feature GLDirectMem -feature HasSharedSlotsHostMemoryAllocator
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -80,7 +83,7 @@ jobs:
           arch: x86_64
           disk-size: 4096M
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader -feature GLDirectMem -feature HasSharedSlotsHostMemoryAllocator -no-snapshot -noaudio -no-boot-anim -memory 2048
+          emulator-options: -no-window ${{ matrix.graphics }} -no-snapshot -noaudio -no-boot-anim -memory 2048
           script: |
             npm run test:android -- emulator-5554
             if [ '${{ matrix.api }}' = '35' ]; then npm run test:android:boot -- emulator-5554 && npm run test:android:unlock -- emulator-5554 && npm run test:android:unlock:shizuku -- emulator-5554; fi
