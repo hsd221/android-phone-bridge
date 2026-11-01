@@ -53,18 +53,26 @@ class NotificationSystemUiTest {
         for (index in 0 until node.childCount) switchNode(node.getChild(index))?.let { return it }
         return null
     }
-    private fun setSystemSwitch(enabled: Boolean) {
+    private fun setSystemSwitch(channel: String, enabled: Boolean) {
         var diagnostics = "No active window"
+        var clicked = false
         eventually("System notification switch was not available", { diagnostics }) {
+            val importance = manager.getNotificationChannel(channel)?.importance
+            val channelMatches = if (enabled) importance != null && importance > NotificationManager.IMPORTANCE_NONE
+                else importance == NotificationManager.IMPORTANCE_NONE
             val root = instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES).rootInActiveWindow
-            diagnostics = "package=${root?.packageName}"
+            diagnostics = "channel=$channel, importance=$importance, clicked=$clicked, package=${root?.packageName}"
+            if (root?.refresh() != true) return@eventually false
             if (root?.packageName?.toString() != "com.android.settings") return@eventually false
             val node = switchNode(root) ?: return@eventually false
+            if (!node.refresh()) return@eventually false
             diagnostics += ", switch=${node.viewIdResourceName},enabled=${node.isEnabled},checked=${node.isChecked}"
-            if (node.isChecked == enabled) return@eventually true
+            if (channelMatches && node.isChecked == enabled) return@eventually true
+            if (channelMatches || node.isChecked == enabled || clicked) return@eventually false
             var target = node
             while (!target.isClickable) target = target.parent ?: return@eventually false
-            node.isEnabled && target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            clicked = node.isEnabled && target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            false
         }
     }
     @Suppress("DEPRECATION")
@@ -90,7 +98,7 @@ class NotificationSystemUiTest {
                         it.notification.flags and Notification.FLAG_FOREGROUND_SERVICE != 0 }
                 }
                 openChannel(BridgeNotificationChannels.CONNECTION)
-                setSystemSwitch(false)
+                setSystemSwitch(BridgeNotificationChannels.CONNECTION, false)
                 eventually("User switch did not hide the connection category") {
                     manager.getNotificationChannel(BridgeNotificationChannels.CONNECTION).importance == NotificationManager.IMPORTANCE_NONE
                 }
@@ -109,11 +117,11 @@ class NotificationSystemUiTest {
                 assertTrue(foregroundConnection())
                 if (Build.VERSION.SDK_INT >= 36) {
                     openChannel(BridgeNotificationChannels.TOOL_CALLS)
-                    setSystemSwitch(false)
+                    setSystemSwitch(BridgeNotificationChannels.TOOL_CALLS, false)
                     eventually("Blocked tool channel did not disable Live Updates") {
                         BridgeNotificationChannels.liveUpdateAvailability(context) == LiveUpdateAvailability.CHANNEL_DISABLED
                     }
-                    setSystemSwitch(true)
+                    setSystemSwitch(BridgeNotificationChannels.TOOL_CALLS, true)
                     eventually("Tool channel was not restored") { manager.getNotificationChannel(BridgeNotificationChannels.TOOL_CALLS).importance > NotificationManager.IMPORTANCE_MIN }
                 }
             }
@@ -121,7 +129,7 @@ class NotificationSystemUiTest {
             try {
                 for (channel in listOf(BridgeNotificationChannels.CONNECTION, BridgeNotificationChannels.TOOL_CALLS)) {
                     openChannel(channel)
-                    setSystemSwitch(true)
+                    setSystemSwitch(channel, true)
                 }
             } finally {
                 instrumentation.runOnMainSync { calls.clear(); prefs.pendingRevocation = null }
