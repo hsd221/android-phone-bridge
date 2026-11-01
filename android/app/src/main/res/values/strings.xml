@@ -5,10 +5,10 @@
     <string name="app_permission_summary">显示 %1$d / 共 %2$d 个 · 已选 %3$d 个%4$s</string>
     <string name="app_permission_hidden">（筛选外 %1$d 个）</string>
     <string name="app_permission_bulk">批量设置（%1$d）</string>
-    <string name="app_permission_scope">一键开启覆盖全部 %1$d 个应用（含筛选外）的读取、操作与四项能力。系统权限与暂停状态保持当前设置；未列出和新装应用默认禁止。</string>
-    <string name="app_permission_scope_compact">全开：全部 %1$d 个应用与四项能力；系统授权、暂停不变。</string>
+    <string name="app_permission_scope">一键开启覆盖全部 %1$d 个应用（含筛选外）的读取、操作与全部工具。系统权限与暂停状态保持当前设置；未列出和新装应用默认禁止。</string>
+    <string name="app_permission_scope_compact">全开：全部 %1$d 个应用与全部工具；系统授权、暂停不变。</string>
     <string name="app_access_summary">已配置 %1$d 个应用 · 允许读取 %2$d 个 · 允许操作 %3$d 个</string>
-    <string name="capability_summary">已开放 %1$d / 4 项能力</string>
+    <string name="capability_summary">已开放 %1$d 项工具</string>
     <string name="catalog_load_error">无法读取应用列表\n返回后可重新打开此页面。</string>
 
     <string name="nav_connection">连接</string>
@@ -22,7 +22,7 @@
     <string name="unpair">解除配对</string>
     <string name="after_connection">连接之后</string>
     <string name="configure_access">配置访问权限</string>
-    <string name="configure_access_detail">选择可读取、可操作的应用与能力。</string>
+    <string name="configure_access_detail">选择可读取、可操作的应用与工具。</string>
     <string name="check_system_permissions">检查系统授权</string>
     <string name="check_system_permissions_detail">无障碍、定位与后台运行状态。</string>
     <string name="connection_persistence">连接由前台服务保持。关闭页面后仍可连接；后台运行受 Android 和厂商设置约束。</string>
@@ -37,8 +37,8 @@
     <string name="app_scope">应用范围</string>
     <string name="app_scope_detail">新应用默认禁止。读取与操作分别配置；本应用的设置始终禁止远程访问。键盘、系统弹窗及覆盖层也需要单独授权。</string>
     <string name="app_permissions">应用权限</string>
-    <string name="capabilities">能力开关</string>
-    <string name="capabilities_detail">能力开关、应用授权和系统权限需要同时满足。通用操作可能触发发送、支付等按钮，请按需要开放。</string>
+    <string name="capabilities">工具权限</string>
+    <string name="capabilities_detail">工具权限、应用授权和系统权限需要同时满足。通用操作可能触发发送、支付等按钮，请按需要开放。</string>
     <string name="cap_location">当前位置</string>
     <string name="cap_location_detail">按次获取位置，需要系统定位权限。</string>
     <string name="cap_ui">读取界面</string>
@@ -47,10 +47,35 @@
     <string name="cap_screenshot_detail">仅获取系统允许且窗口已授权的截图。</string>
     <string name="cap_operate">操作应用</string>
     <string name="cap_operate_detail">打开应用、点击、滑动、输入与返回。</string>
-    <string name="enable_all_capabilities">开启四项能力</string>
-    <string name="enable_all_success">已开启四项能力；应用和系统授权需分别设置</string>
-    <string name="disable_all_capabilities">关闭四项能力</string>
-    <string name="disable_all_success">已关闭四项能力</string>
+    <string name="tools">工具权限</string>
+    <string name="tools_detail">每个 Bridge 工具单独授权。工具权限、应用授权和系统授权需要同时满足。</string>
+    <string name="tool_summary">已开放 %1$d / %2$d 项工具</string>
+    <string name="tool_location">phone_location · 获取定位</string>
+    <string name="tool_location_detail">按次获取当前定位，需要系统定位权限。</string>
+    <string name="tool_ui">phone_ui · 读取界面</string>
+    <string name="tool_ui_detail">读取已授权应用的可见文字与控件。</string>
+    <string name="tool_screenshot">phone_screenshot · 截取屏幕</string>
+    <string name="tool_screenshot_detail">获取系统允许且窗口已授权的截图。</string>
+    <string name="tool_open_app">phone_open_app · 打开应用</string>
+    <string name="tool_open_app_detail">打开已授权应用；目标应用仍需允许操作。</string>
+    <string name="tool_tap">phone_tap · 点击</string>
+    <string name="tool_tap_detail">点击已授权应用中的控件或屏幕坐标。</string>
+    <string name="tool_swipe">phone_swipe · 滑动</string>
+    <string name="tool_swipe_detail">在已授权应用中执行滑动手势。</string>
+    <string name="tool_input">phone_input · 输入</string>
+    <string name="tool_input_detail">向已授权应用的编辑控件写入文字。</string>
+    <string name="tool_back">phone_back · 返回</string>
+    <string name="tool_back_detail">在已授权应用中发送 Android 返回操作。</string>
+    <string name="tool_unlock">phone_unlock · 解锁</string>
+    <string name="tool_unlock_detail">使用本机单独授权的凭据唤醒并解锁手机。</string>
+    <string name="enable_all_tools">开启全部工具</string>
+    <string name="enable_all_tools_success">已开启全部工具；应用和系统授权需分别设置</string>
+    <string name="disable_all_tools">关闭全部工具</string>
+    <string name="disable_all_tools_success">已关闭全部工具</string>
+    <string name="enable_all_capabilities">开启全部工具</string>
+    <string name="enable_all_success">已开启全部工具；应用和系统授权需分别设置</string>
+    <string name="disable_all_capabilities">关闭全部工具</string>
+    <string name="disable_all_success">已关闭全部工具</string>
     <string name="unlock">锁屏解锁</string>
     <string name="unlock_detail">独立授权，默认关闭。PIN、密码和图案仅在手机本地加密保存；不会发送到 Bridge。</string>
     <string name="local_unlock_settings">本地解锁设置</string>
@@ -63,7 +88,7 @@
     <string name="view_releases">查看发布版本</string>
     <string name="view_releases_detail">在浏览器中查看所有版本与下载。</string>
     <string name="system_permissions">系统授权</string>
-    <string name="system_permissions_detail">这里显示 Android 的实际授权。应用内开启能力不会替代系统授权。</string>
+    <string name="system_permissions_detail">这里显示 Android 的实际授权。应用内开启工具不会替代系统授权。</string>
     <string name="permission_accessibility">无障碍</string>
     <string name="permission_location">定位权限</string>
     <string name="permission_background_location">后台定位</string>
@@ -108,7 +133,7 @@
     <string name="connected">已连接</string>
     <string name="revoke_detail">本机已停止访问。联网后会重试撤销 Bridge 上的旧身份，完成后可重新配对。</string>
     <string name="unpaired_detail">填写 Bridge 地址和配对码，建立这台手机的连接。</string>
-    <string name="connected_detail">手机已连接 Bridge。可用能力取决于访问控制和系统授权。</string>
+    <string name="connected_detail">手机已连接 Bridge。可用工具取决于访问控制和系统授权。</string>
     <string name="reconnecting_detail">访问权限保存在本机，连接恢复后仍按当前授权执行。</string>
     <string name="unpair_title">解除这台手机的配对？</string>
     <string name="unpair_detail">立即停止本机连接与访问。离线时会保留加密的撤销请求，联网后撤销 Bridge 上的旧身份。重新配对不会自动解除暂停。</string>
@@ -132,7 +157,7 @@
     <string name="loading_apps">正在读取应用列表…</string>
     <string name="batch_settings">批量设置</string>
     <string name="enable_all_apps">一键全部开启</string>
-    <string name="enable_all_apps_success">已开启列表中 %1$d 个应用及四项能力；系统授权与暂停状态保持当前设置</string>
+    <string name="enable_all_apps_success">已开启列表中 %1$d 个应用及全部工具；系统授权与暂停状态保持当前设置</string>
     <string name="catalog_error">应用列表读取失败，请重新打开页面</string>
     <string name="empty_apps">列表中还没有应用\n可通过“添加包名”配置应用。</string>
     <string name="no_matching_apps">没有匹配的应用\n换个名称、清空搜索，或添加包名。</string>
@@ -147,7 +172,7 @@
     <string name="configure">配置</string>
     <string name="invalid_package">请输入其他应用的有效包名</string>
     <string name="allow_read_screenshot">允许读取与截图</string>
-    <string name="read_screenshot_note">仍需开启对应能力并授予系统权限。</string>
+    <string name="read_screenshot_note">仍需开启对应工具并授予系统权限。</string>
     <string name="allow_open_operate">允许打开与操作</string>
     <string name="operate_note">包括点击、输入、滑动与返回。</string>
     <string name="save">保存</string>
@@ -159,7 +184,7 @@
     <string name="local_unlock_title">本地解锁</string>
     <string name="local_unlock_subtitle">凭据只保存在这台手机，不发送给 Bridge 或 AI。</string>
     <string name="separate_authorization">单独授权</string>
-    <string name="separate_authorization_detail">同时需要“操作应用”能力与无障碍服务。开启 Shizuku 增强后，连接可用时优先使用；未连接则使用无障碍。暂停操作或暂停全部访问会停止解锁；一键全开不会开启此授权。</string>
+    <string name="separate_authorization_detail">同时需要 phone_unlock 工具授权与无障碍服务。开启 Shizuku 增强后，连接可用时优先使用；未连接则使用无障碍。暂停操作或暂停全部访问会停止解锁；开启全部工具不会开启此授权。</string>
     <string name="allow_remote_unlock">允许远程请求解锁</string>
     <string name="allow_remote_unlock_detail">允许已配对的 AI 唤醒并使用本地配置解锁手机。</string>
     <string name="configure_credentials">在手机上配置凭据</string>
@@ -245,16 +270,16 @@
         <item quantity="other">已配置 %1$d 个应用 · 允许读取 %2$d 个 · 允许操作 %3$d 个</item>
     </plurals>
     <plurals name="app_permission_scope_count">
-        <item quantity="one">一键开启覆盖全部 %1$d 个应用（含筛选外）的读取、操作与四项能力。系统权限与暂停状态保持当前设置；未列出和新装应用默认禁止。</item>
-        <item quantity="other">一键开启覆盖全部 %1$d 个应用（含筛选外）的读取、操作与四项能力。系统权限与暂停状态保持当前设置；未列出和新装应用默认禁止。</item>
+        <item quantity="one">一键开启覆盖全部 %1$d 个应用（含筛选外）的读取、操作与全部工具。系统权限与暂停状态保持当前设置；未列出和新装应用默认禁止。</item>
+        <item quantity="other">一键开启覆盖全部 %1$d 个应用（含筛选外）的读取、操作与全部工具。系统权限与暂停状态保持当前设置；未列出和新装应用默认禁止。</item>
     </plurals>
     <plurals name="app_permission_scope_compact_count">
-        <item quantity="one">全开：全部 %1$d 个应用与四项能力；系统授权、暂停不变。</item>
-        <item quantity="other">全开：全部 %1$d 个应用与四项能力；系统授权、暂停不变。</item>
+        <item quantity="one">全开：全部 %1$d 个应用与全部工具；系统授权、暂停不变。</item>
+        <item quantity="other">全开：全部 %1$d 个应用与全部工具；系统授权、暂停不变。</item>
     </plurals>
     <plurals name="enable_all_apps_success_count">
-        <item quantity="one">已开启列表中 %1$d 个应用及四项能力；系统授权与暂停状态保持当前设置</item>
-        <item quantity="other">已开启列表中 %1$d 个应用及四项能力；系统授权与暂停状态保持当前设置</item>
+        <item quantity="one">已开启列表中 %1$d 个应用及全部工具；系统授权与暂停状态保持当前设置</item>
+        <item quantity="other">已开启列表中 %1$d 个应用及全部工具；系统授权与暂停状态保持当前设置</item>
     </plurals>
     <plurals name="batch_title_count">
         <item quantity="one">批量设置 %1$d 个应用</item>
@@ -379,6 +404,7 @@
     <string name="err_shizuku_launch_failed">Shizuku 应用启动失败：%1$d</string>
     <string name="err_pairing_http_status">配对失败（HTTP %1$d），请检查地址、配对码和有效期</string>
     <string name="err_capability_disabled">用户未开放此能力：%1$s</string>
+    <string name="err_tool_disabled">用户未开放此工具：%1$s</string>
     <string name="err_app_not_authorized">未授权访问应用：%1$s</string>
     <string name="unlock_kind_pin">数字 PIN</string>
     <string name="unlock_kind_password">文字密码</string>

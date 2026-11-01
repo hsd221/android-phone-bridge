@@ -2,6 +2,26 @@ package io.github.hsd221.phonebridge
 
 
 enum class Capability { LOCATION, UI, SCREENSHOT, OPERATE }
+
+/** The externally callable phone tools that can be enabled independently. */
+object BridgeTools {
+    val all = listOf(
+        "phone_location", "phone_ui", "phone_screenshot", "phone_open_app",
+        "phone_tap", "phone_swipe", "phone_input", "phone_back", "phone_unlock",
+    )
+    val operations = setOf("phone_unlock", "phone_open_app", "phone_tap", "phone_swipe", "phone_input", "phone_back")
+
+    fun capability(tool: String) = when (tool) {
+        "phone_location" -> Capability.LOCATION
+        "phone_ui" -> Capability.UI
+        "phone_screenshot" -> Capability.SCREENSHOT
+        "phone_unlock", "phone_open_app", "phone_tap", "phone_swipe", "phone_input", "phone_back" -> Capability.OPERATE
+        else -> null
+    }
+
+    fun toolsFor(capabilities: Set<Capability>) = all.filter { capability(it) in capabilities }.toSet()
+    fun capabilitiesFor(tools: Set<String>) = tools.mapNotNull(::capability).toSet()
+}
 data class AppAccess(val read: Boolean = false, val operate: Boolean = false)
 class ToolFailure(val code: String, override val message: String, val outcomeUnknown: Boolean = false) : Exception(message)
 
@@ -11,26 +31,17 @@ data class AccessPolicy(
     val capabilities: Set<Capability> = emptySet(),
     val apps: Map<String, AppAccess> = emptyMap(),
     val unlockEnabled: Boolean = false,
+    val tools: Set<String> = emptySet(),
+    val toolPermissionsConfigured: Boolean = false,
 ) {
     fun requireTool(tool: String) {
         // Status stays available as a non-sensitive way to learn why requests are denied.
         if (tool == "phone_status") return
         if (pausedAll) throw ToolFailure("PAUSED", text(R.string.err_access_paused))
-        val capability = when (tool) {
-            "phone_location" -> Capability.LOCATION
-            "phone_ui" -> Capability.UI
-            "phone_screenshot" -> Capability.SCREENSHOT
-            "phone_unlock", "phone_open_app", "phone_tap", "phone_swipe", "phone_input", "phone_back" -> Capability.OPERATE
-            else -> throw ToolFailure("UNKNOWN_TOOL", text(R.string.err_unknown_tool))
-        }
-        if (capability == Capability.OPERATE && pausedOperations) throw ToolFailure("OPERATIONS_PAUSED", text(R.string.err_operations_paused))
-        val capabilityName = text(when (capability) {
-            Capability.LOCATION -> R.string.cap_location
-            Capability.UI -> R.string.cap_ui
-            Capability.SCREENSHOT -> R.string.cap_screenshot
-            Capability.OPERATE -> R.string.cap_operate
-        })
-        if (capability !in capabilities) throw ToolFailure("CAPABILITY_DENIED", text(R.string.err_capability_disabled, capabilityName))
+        val capability = BridgeTools.capability(tool) ?: throw ToolFailure("UNKNOWN_TOOL", text(R.string.err_unknown_tool))
+        if (tool in BridgeTools.operations && pausedOperations) throw ToolFailure("OPERATIONS_PAUSED", text(R.string.err_operations_paused))
+        val allowed = if (toolPermissionsConfigured || tools.isNotEmpty()) tool in tools else capability in capabilities
+        if (!allowed) throw ToolFailure("CAPABILITY_DENIED", text(R.string.err_tool_disabled, tool))
         if (tool == "phone_unlock" && !unlockEnabled) throw ToolFailure("CAPABILITY_DENIED", text(R.string.err_unlock_authorization_required))
     }
 

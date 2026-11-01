@@ -19,6 +19,7 @@ import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import io.github.hsd221.phonebridge.ui.ActionRow
@@ -47,7 +48,8 @@ class MainActivity : Activity() {
     private val pages = mutableListOf<View>()
     private val navigation = mutableListOf<Button>()
     private val permissionViews = mutableMapOf<String, ActionRow>()
-    private val capabilityRows = mutableMapOf<Capability, ToggleRow>()
+    private val toolRows = mutableMapOf<String, ToggleRow>()
+    private val legacyToolAliases = mutableMapOf<String, Switch>()
     private lateinit var pauseAll: ToggleRow
     private lateinit var pauseOperations: ToggleRow
     private lateinit var shizukuToggle: ToggleRow
@@ -55,7 +57,7 @@ class MainActivity : Activity() {
     private lateinit var connectionDetail: TextView
     private lateinit var accessState: TextView
     private lateinit var appSummary: ActionRow
-    private lateinit var capabilitySummary: TextView
+    private lateinit var toolSummary: TextView
     private var address: Field? = null
     private var code: Field? = null
     private var pairingError: TextView? = null
@@ -119,7 +121,7 @@ class MainActivity : Activity() {
 
     private fun render() {
         draftAddress = address?.input?.text?.toString() ?: draftAddress
-        permissionViews.clear(); capabilityRows.clear(); pages.clear(); navigation.clear()
+        permissionViews.clear(); toolRows.clear(); legacyToolAliases.clear(); pages.clear(); navigation.clear()
         address = null; code = null; pairingError = null; pairButton = null; httpToggle = null
         pairedAtRender = prefs.identity != null
         val root = FrameLayout(this)
@@ -198,23 +200,52 @@ class MainActivity : Activity() {
         val apps = ui.section(this, getString(R.string.app_scope), getString(R.string.app_scope_detail))
         appSummary = ui.actionRow(getString(R.string.app_permissions_title), "") { startActivity(Intent(this@MainActivity, AppPermissionsActivity::class.java)) }.apply { id = R.id.manage_app_permissions }
         apps.addView(appSummary)
-        val capabilities = ui.section(this, getString(R.string.capabilities), getString(R.string.capabilities_detail))
-        capabilitySummary = ui.text("", 13f, true, ui.secondary)
-        capabilities.addView(capabilitySummary, ui.gap(top = 12, bottom = 4))
+        val tools = ui.section(this, getString(R.string.tools), getString(R.string.tools_detail))
+        toolSummary = ui.text("", 13f, true, ui.secondary)
+        tools.addView(toolSummary, ui.gap(top = 12, bottom = 4))
         val specs = listOf(
-            Triple(Capability.LOCATION, getString(R.string.cap_location), getString(R.string.cap_location_detail)),
-            Triple(Capability.UI, getString(R.string.cap_ui), getString(R.string.cap_ui_detail)),
-            Triple(Capability.SCREENSHOT, getString(R.string.cap_screenshot), getString(R.string.cap_screenshot_detail)),
-            Triple(Capability.OPERATE, getString(R.string.cap_operate), getString(R.string.cap_operate_detail)),
+            Triple("phone_location", getString(R.string.tool_location), getString(R.string.tool_location_detail)),
+            Triple("phone_ui", getString(R.string.tool_ui), getString(R.string.tool_ui_detail)),
+            Triple("phone_screenshot", getString(R.string.tool_screenshot), getString(R.string.tool_screenshot_detail)),
+            Triple("phone_open_app", getString(R.string.tool_open_app), getString(R.string.tool_open_app_detail)),
+            Triple("phone_tap", getString(R.string.tool_tap), getString(R.string.tool_tap_detail)),
+            Triple("phone_swipe", getString(R.string.tool_swipe), getString(R.string.tool_swipe_detail)),
+            Triple("phone_input", getString(R.string.tool_input), getString(R.string.tool_input_detail)),
+            Triple("phone_back", getString(R.string.tool_back), getString(R.string.tool_back_detail)),
+            Triple("phone_unlock", getString(R.string.tool_unlock), getString(R.string.tool_unlock_detail)),
         )
-        val ids = listOf(R.id.cap_location, R.id.cap_ui, R.id.cap_screenshot, R.id.cap_operate)
-        specs.forEachIndexed { i, (capability, title, detail) ->
-            if (i > 0) ui.divider(capabilities)
-            val row = ui.toggle(title, detail, ids[i]) { saveSettings { prefs.setFlag("cap_${capability.name}", it) } }
-            capabilities.addView(row); capabilityRows[capability] = row
+        val ids = listOf(
+            R.id.tool_location, R.id.tool_ui, R.id.tool_screenshot, R.id.tool_open_app,
+            R.id.tool_tap, R.id.tool_swipe, R.id.tool_input, R.id.tool_back, R.id.tool_unlock,
+        )
+        specs.forEachIndexed { i, (tool, title, detail) ->
+            if (i > 0) ui.divider(tools)
+            val row = ui.toggle(title, detail, ids[i]) { enabled ->
+                saveSettings {
+                    val selected = prefs.policy().tools.toMutableSet()
+                    if (enabled) selected.add(tool) else selected.remove(tool)
+                    prefs.setPermissions(tools = selected)
+                }
+            }
+            tools.addView(row); toolRows[tool] = row
         }
-        ui.addButton(capabilities, getString(R.string.enable_all_capabilities), viewId = R.id.capabilities_enable_all) { saveSettings(getString(R.string.enable_all_success)) { prefs.setCapabilities(true) } }
-        ui.addButton(capabilities, getString(R.string.disable_all_capabilities), ButtonKind.QUIET, R.id.capabilities_disable_all) { saveSettings(getString(R.string.disable_all_success)) { prefs.setCapabilities(false) } }
+        // Keep the old capability IDs as non-visible compatibility handles for
+        // existing automation while the visible controls use tool IDs.
+        mapOf(
+            "phone_location" to R.id.cap_location,
+            "phone_ui" to R.id.cap_ui,
+            "phone_screenshot" to R.id.cap_screenshot,
+            "phone_open_app" to R.id.cap_operate,
+        ).forEach { (tool, id) ->
+            val alias = Switch(this).apply {
+                this.id = id; visibility = View.GONE; isSaveEnabled = false
+                setOnClickListener { toolRows[tool]?.toggle?.performClick() }
+            }
+            legacyToolAliases[tool] = alias
+            tools.addView(alias, LinearLayout.LayoutParams(0, 0))
+        }
+        ui.addButton(tools, getString(R.string.enable_all_tools), viewId = R.id.capabilities_enable_all) { saveSettings(getString(R.string.enable_all_tools_success)) { prefs.setTools(true) } }
+        ui.addButton(tools, getString(R.string.disable_all_tools), ButtonKind.QUIET, R.id.capabilities_disable_all) { saveSettings(getString(R.string.disable_all_tools_success)) { prefs.setTools(false) } }
         val unlock = ui.section(this, getString(R.string.unlock), getString(R.string.unlock_detail))
         unlock.addView(ui.actionRow(getString(R.string.local_unlock_settings), getString(R.string.local_unlock_settings_detail)) {
             startActivity(Intent(this@MainActivity, UnlockSettingsActivity::class.java))
@@ -420,8 +451,9 @@ class MainActivity : Activity() {
         accessState.text = when { policy.pausedAll -> getString(R.string.pause_all_status); policy.pausedOperations -> getString(R.string.paused_operations_access_status); identity == null -> getString(R.string.not_paused_unpaired); else -> getString(R.string.access_open_by_policy) }
         accessState.setTextColor(if (policy.pausedAll || policy.pausedOperations) ui.warning else ui.accent)
         pauseAll.bind(policy.pausedAll); pauseOperations.bind(policy.pausedOperations)
-        capabilityRows.forEach { (capability, row) -> row.bind(capability in policy.capabilities) }
-        capabilitySummary.text = getString(R.string.capability_summary, policy.capabilities.size)
+        toolRows.forEach { (tool, row) -> row.bind(tool in policy.tools) }
+        legacyToolAliases.forEach { (tool, alias) -> alias.isChecked = tool in policy.tools }
+        toolSummary.text = getString(R.string.tool_summary, policy.tools.size, BridgeTools.all.size)
         val apps = policy.apps.filterKeys { it != packageName }.values
         val summary = resources.getQuantityString(R.plurals.app_access_summary_count, apps.size, apps.size, apps.count { it.read }, apps.count { it.operate })
         appSummary.bindDetail(summary)

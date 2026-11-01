@@ -16,6 +16,12 @@ class PolicyTest {
         denied("APP_DENIED") { policy.requireApp("com.example.test", operation = true) }
         denied("APP_DENIED") { policy.requireApp("com.example.other") }
     }
+    @Test fun toolPermissionsAreIndependentWithinAnOldCapabilityGroup() {
+        val policy = AccessPolicy(tools = setOf("phone_ui"), toolPermissionsConfigured = true)
+        policy.requireTool("phone_ui")
+        denied("CAPABILITY_DENIED") { policy.requireTool("phone_screenshot") }
+        denied("CAPABILITY_DENIED") { policy.requireTool("phone_tap") }
+    }
     @Test fun pauseStopsNewOperationsButStatusCanExplain() {
         val all = AccessPolicy(pausedAll = true, capabilities = Capability.entries.toSet())
         all.requireTool("phone_status")

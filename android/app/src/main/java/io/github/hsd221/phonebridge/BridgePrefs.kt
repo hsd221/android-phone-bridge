@@ -40,18 +40,34 @@ class BridgePrefs(private val context: Context) {
         set(value) { setFlag("unlockEnabled", value); if (!value) UnlockDiagnostics.clear() }
     fun policy(): AccessPolicy {
         val apps = JSONObject(preferences.getString("apps", "{}")!!)
-        return AccessPolicy(preferences.getBoolean("pausedAll", false), preferences.getBoolean("pausedOperations", false),
-            Capability.entries.filter { preferences.getBoolean("cap_${it.name}", false) }.toSet(),
-            apps.keys().asSequence().associateWith { val app = apps.getJSONObject(it); AppAccess(app.optBoolean("read"), app.optBoolean("operate")) },
-            unlockEnabled = unlockEnabled)
+        val legacyCapabilities = Capability.entries.filter { preferences.getBoolean("cap_${it.name}", false) }.toSet()
+        val configured = preferences.getBoolean("tool_permissions_configured", false) ||
+            BridgeTools.all.any { preferences.contains("tool_$it") }
+        val tools = if (configured) {
+            BridgeTools.all.filter { preferences.getBoolean("tool_$it", false) }.toSet()
+        } else {
+            // Existing installations used capability switches. Read them as a
+            // compatibility view until the user saves tool settings.
+            BridgeTools.toolsFor(legacyCapabilities)
+        }
+        return AccessPolicy(
+            pausedAll = preferences.getBoolean("pausedAll", false),
+            pausedOperations = preferences.getBoolean("pausedOperations", false),
+            capabilities = if (configured) BridgeTools.capabilitiesFor(tools) else legacyCapabilities,
+            apps = apps.keys().asSequence().associateWith { val app = apps.getJSONObject(it); AppAccess(app.optBoolean("read"), app.optBoolean("operate")) },
+            unlockEnabled = unlockEnabled,
+            tools = tools,
+            toolPermissionsConfigured = configured,
+        )
     }
     fun setApp(packageName: String, access: AppAccess) {
         setApps(mapOf(packageName to access))
     }
     fun setApps(updates: Map<String, AppAccess>) = setPermissions(updates)
     fun setCapabilities(enabled: Boolean) = setPermissions(capabilities = if (enabled) Capability.entries.toSet() else emptySet())
-    /** One durable transaction, including when all applications and capabilities are enabled together. */
-    fun setPermissions(updates: Map<String, AppAccess> = emptyMap(), capabilities: Set<Capability>? = null) {
+    fun setTools(enabled: Boolean) = setPermissions(tools = if (enabled) BridgeTools.all.toSet() else emptySet())
+    /** One durable transaction, including when all applications and tool permissions are enabled together. */
+    fun setPermissions(updates: Map<String, AppAccess> = emptyMap(), capabilities: Set<Capability>? = null, tools: Set<String>? = null) {
         val editor = preferences.edit()
         if (updates.isNotEmpty()) {
             val apps = JSONObject(preferences.getString("apps", "{}")!!)
@@ -60,10 +76,33 @@ class BridgePrefs(private val context: Context) {
             }
             editor.putString("apps", apps.toString())
         }
-        capabilities?.let { enabled -> Capability.entries.forEach { editor.putBoolean("cap_${it.name}", it in enabled) } }
+        val selectedTools = when {
+            tools != null -> tools.intersect(BridgeTools.all.toSet())
+            capabilities != null -> BridgeTools.toolsFor(capabilities)
+            else -> null
+        }
+        selectedTools?.let { enabled ->
+            editor.putBoolean("tool_permissions_configured", true)
+            BridgeTools.all.forEach { editor.putBoolean("tool_$it", it in enabled) }
+            val derivedCapabilities = BridgeTools.capabilitiesFor(enabled)
+            Capability.entries.forEach { editor.putBoolean("cap_${it.name}", it in derivedCapabilities) }
+        }
         check(editor.commit()) { text(R.string.err_permissions_save_failed) }
     }
-    fun setFlag(key: String, value: Boolean) { check(preferences.edit().putBoolean(key, value).commit()) { text(R.string.err_settings_save_failed) } }
+    fun setFlag(key: String, value: Boolean) {
+        // Keep the old capability-key API coherent for integrations and test
+        // provisioning while the durable source of truth is tool permissions.
+        if (key.startsWith("cap_")) {
+            val capability = runCatching { Capability.valueOf(key.removePrefix("cap_")) }.getOrNull()
+            if (capability != null) {
+                val enabled = policy().tools.toMutableSet()
+                BridgeTools.all.filter { BridgeTools.capability(it) == capability }.forEach { if (value) enabled.add(it) else enabled.remove(it) }
+                setPermissions(tools = enabled)
+                return
+            }
+        }
+        check(preferences.edit().putBoolean(key, value).commit()) { text(R.string.err_settings_save_failed) }
+    }
     private fun readIdentity(key: String): PhoneIdentity? {
         val encrypted = preferences.getString(key, null) ?: return null
         return try {

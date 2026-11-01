@@ -45,6 +45,7 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
         return JSONObject().put("deviceId", prefs.deviceId).put("connected", BridgeService.connected)
             .put("appVersion", BuildConfig.VERSION_NAME).put("appVersionCode", BuildConfig.VERSION_CODE)
             .put("androidApi", Build.VERSION.SDK_INT).put("pausedAll", policy.pausedAll).put("pausedOperations", policy.pausedOperations)
+            .put("tools", JSONObject(BridgeTools.all.associateWith { it in policy.tools }))
             .put("capabilities", JSONObject(Capability.entries.associate { it.name.lowercase() to (it in policy.capabilities) }))
             .put("permissions", JSONObject().put("accessibility", PhoneAccessibilityService.instance != null)
                 .put("fineLocation", granted(Manifest.permission.ACCESS_FINE_LOCATION)).put("coarseLocation", granted(Manifest.permission.ACCESS_COARSE_LOCATION))

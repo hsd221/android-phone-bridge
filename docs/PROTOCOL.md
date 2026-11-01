@@ -129,8 +129,8 @@ Bridge 将来自 MCP 的工具调用封装为 JSON 请求包发送给手机端�
 ### 2. 工具列表与坐标体系
 
 协议目前支持 10 项核心工具（具体参数详见 `bridge/src/protocol.ts`）：
-- `phone_status`：查询设备连接状态、Android 系统版本、两级暂停标志、能力开关、按应用授权清单及 Shizuku 运行状态。`appVersion` 与 `appVersionCode` 标识手机 APK 版本，便于确认升级；`screen` 包含亮屏、键盘锁、设备锁与首解状态；`unlock` 包含独立授权、是否配置本地凭据、是否阻止重试及固定的最近尝试状态，不包含凭据、节点或屏幕内容。
-- `phone_unlock`：空参数 `{}`，唤醒并使用手机本地配置请求解锁。需要操作能力及独立解锁授权，受两级暂停控制。一键全开不会开启此授权。PIN、密码与图案不属于协议字段，任何额外参数都会被拒绝。成功返回 `unlocked: true`、`path` 与屏幕状态；`path` 区分 `already_unlocked`、`system`、`local_credential` 和 `shizuku`。Shizuku 未连接或输入前不可用时可回退无障碍，已开始凭据输入则不切换路径重试；需要人工或系统不支持时明确返回错误，不能盲目重试。
+- `phone_status`：查询设备连接状态、Android 系统版本、两级暂停标志、逐工具权限、按应用授权清单及 Shizuku 运行状态。`tools` 是以 `phone_*` 为键的逐项授权结果；`capabilities` 作为旧客户端兼容字段保留。`appVersion` 与 `appVersionCode` 标识手机 APK 版本，便于确认升级；`screen` 包含亮屏、键盘锁、设备锁与首解状态；`unlock` 包含独立授权、是否配置本地凭据、是否阻止重试及固定的最近尝试状态，不包含凭据、节点或屏幕内容。
+- `phone_unlock`：空参数 `{}`，唤醒并使用手机本地配置请求解锁。需要 `phone_unlock` 工具授权及独立解锁授权，受两级暂停控制。开启全部工具不会开启此授权。PIN、密码与图案不属于协议字段，任何额外参数都会被拒绝。成功返回 `unlocked: true`、`path` 与屏幕状态；`path` 区分 `already_unlocked`、`system`、`local_credential` 和 `shizuku`。Shizuku 未连接或输入前不可用时可回退无障碍，已开始凭据输入则不切换路径重试；需要人工或系统不支持时明确返回错误，不能盲目重试。
 - `phone_location`：获取设备当前定位（经纬度、精度及时间戳）。
 - `phone_ui`：获取当前可见窗口的无障碍节点树与文本内容。
 - `phone_screenshot`：获取屏幕截屏（返回图片 Base64 与物理分辨率元数据）。
@@ -209,8 +209,8 @@ Bridge 可主动发送取消消息：
 | `REPLAY_REJECTED` | 检测到重复的请求 ID，拒绝执行。 |
 | `BUSY` | 手机端请求队列已满（超出 8 个）。 |
 | `PAUSED` | 用户在手机端开启了“暂停全部访问”。 |
-| `OPERATIONS_PAUSED` | 用户在手机端开启了“暂停操作”（读取类能力仍可能可用）。 |
-| `CAPABILITY_DENIED` | 请求对应的能力开关（如定位、截屏）未开启。 |
+| `OPERATIONS_PAUSED` | 用户在手机端开启了“暂停操作”（读取类工具仍可能可用）。 |
+| `CAPABILITY_DENIED` | 请求对应的工具权限（如 `phone_location`、`phone_screenshot`）未开启。 |
 | `APP_DENIED` | 目标应用包名未加入用户的读取或操作白名单。 |
 | `APP_CHANGED` | 预期操作的前台应用在动作触发瞬间发生了切换。 |
 | `STALE_NODE` | 目标 `nodeId` 已失效，UI 树已发生变化。 |

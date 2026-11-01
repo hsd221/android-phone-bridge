@@ -52,6 +52,15 @@
     <item type="id" name="cap_ui" />
     <item type="id" name="cap_screenshot" />
     <item type="id" name="cap_operate" />
+    <item type="id" name="tool_location" />
+    <item type="id" name="tool_ui" />
+    <item type="id" name="tool_screenshot" />
+    <item type="id" name="tool_open_app" />
+    <item type="id" name="tool_tap" />
+    <item type="id" name="tool_swipe" />
+    <item type="id" name="tool_input" />
+    <item type="id" name="tool_back" />
+    <item type="id" name="tool_unlock" />
     <item type="id" name="connection_state" />
     <item type="id" name="manage_app_permissions" />
     <item type="id" name="access_state" />

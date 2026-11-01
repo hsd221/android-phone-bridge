@@ -4,10 +4,10 @@
     <string name="app_permission_summary">Showing %1$d of %2$d · %3$d selected%4$s</string>
     <string name="app_permission_hidden"> (%1$d filtered out)</string>
     <string name="app_permission_bulk">Batch settings (%1$d)</string>
-    <string name="app_permission_scope">Enable reading, operations, and all four capabilities for all %1$d apps, including filtered apps. System grants and pause state stay unchanged; unlisted and newly installed apps remain denied.</string>
-    <string name="app_permission_scope_compact">All: %1$d apps and all four capabilities; system grants and pause state unchanged.</string>
+    <string name="app_permission_scope">Enable reading, operations, and all tools for all %1$d apps, including filtered apps. System grants and pause state stay unchanged; unlisted and newly installed apps remain denied.</string>
+    <string name="app_permission_scope_compact">All: %1$d apps and all tools; system grants and pause state unchanged.</string>
     <string name="app_access_summary">%1$d apps configured · %2$d allow reading · %3$d allow operations</string>
-    <string name="capability_summary">%1$d / 4 capabilities enabled</string>
+    <string name="capability_summary">%1$d tools enabled</string>
     <string name="unlock_pattern_count">%1$d points selected</string>
     <string name="nav_connection">Connection</string>
     <string name="nav_access">Access</string>
@@ -20,7 +20,7 @@
     <string name="unpair">Unpair</string>
     <string name="after_connection">After connecting</string>
     <string name="configure_access">Configure access permissions</string>
-    <string name="configure_access_detail">Choose which apps and capabilities can be read or operated.</string>
+    <string name="configure_access_detail">Choose which apps and tools can be read or operated.</string>
     <string name="check_system_permissions">Check system permissions</string>
     <string name="check_system_permissions_detail">Accessibility, location, and background operation status.</string>
     <string name="connection_persistence">The foreground service keeps the connection alive. It can stay connected after this page closes; background operation depends on Android and the device manufacturer.</string>
@@ -35,8 +35,8 @@
     <string name="app_scope">App scope</string>
     <string name="app_scope_detail">New apps are denied by default. Configure reading and operations separately; this app\'s settings always remain inaccessible remotely. Keyboards, system dialogs, and overlays require separate authorization.</string>
     <string name="app_permissions">App permissions</string>
-    <string name="capabilities">Capabilities</string>
-    <string name="capabilities_detail">Capability switches, app grants, and system permissions must all allow access. Generic operations may trigger send or payment buttons, so enable them only as needed.</string>
+    <string name="capabilities">Tool permissions</string>
+    <string name="capabilities_detail">Tool permissions, app grants, and system permissions must all allow access. Generic operations may trigger send or payment buttons, so enable them only as needed.</string>
     <string name="cap_location">Current location</string>
     <string name="cap_location_detail">Get the location on demand; system location permission is required.</string>
     <string name="cap_ui">Read UI</string>
@@ -45,10 +45,35 @@
     <string name="cap_screenshot_detail">Capture only when the system and the window allow it.</string>
     <string name="cap_operate">Operate apps</string>
     <string name="cap_operate_detail">Open apps, tap, swipe, input, and go back.</string>
-    <string name="enable_all_capabilities">Enable all four capabilities</string>
-    <string name="enable_all_success">All four capabilities enabled; app and system grants are configured separately</string>
-    <string name="disable_all_capabilities">Disable all four capabilities</string>
-    <string name="disable_all_success">All four capabilities disabled</string>
+    <string name="tools">Tool permissions</string>
+    <string name="tools_detail">Authorize each Bridge tool independently. Tool, app, and system grants must all allow access.</string>
+    <string name="tool_summary">%1$d / %2$d tools enabled</string>
+    <string name="tool_location">phone_location · Get location</string>
+    <string name="tool_location_detail">Get the current location on demand; system location permission is required.</string>
+    <string name="tool_ui">phone_ui · Read UI</string>
+    <string name="tool_ui_detail">Read visible text and controls from authorized apps.</string>
+    <string name="tool_screenshot">phone_screenshot · Capture screen</string>
+    <string name="tool_screenshot_detail">Capture only when the system and window allow it.</string>
+    <string name="tool_open_app">phone_open_app · Open app</string>
+    <string name="tool_open_app_detail">Open an authorized app; the target app must also allow operations.</string>
+    <string name="tool_tap">phone_tap · Tap</string>
+    <string name="tool_tap_detail">Tap a control or screen coordinate in an authorized app.</string>
+    <string name="tool_swipe">phone_swipe · Swipe</string>
+    <string name="tool_swipe_detail">Perform a swipe gesture in an authorized app.</string>
+    <string name="tool_input">phone_input · Input</string>
+    <string name="tool_input_detail">Write text to an editable control in an authorized app.</string>
+    <string name="tool_back">phone_back · Back</string>
+    <string name="tool_back_detail">Send Android Back in an authorized app.</string>
+    <string name="tool_unlock">phone_unlock · Unlock</string>
+    <string name="tool_unlock_detail">Wake and unlock the phone using separately authorized local credentials.</string>
+    <string name="enable_all_tools">Enable all tools</string>
+    <string name="enable_all_tools_success">All tools enabled; app and system grants are configured separately</string>
+    <string name="disable_all_tools">Disable all tools</string>
+    <string name="disable_all_tools_success">All tools disabled</string>
+    <string name="enable_all_capabilities">Enable all tools</string>
+    <string name="enable_all_success">All tools enabled; app and system grants are configured separately</string>
+    <string name="disable_all_capabilities">Disable all tools</string>
+    <string name="disable_all_success">All tools disabled</string>
     <string name="unlock">Lock-screen unlock</string>
     <string name="unlock_detail">Separate authorization, disabled by default. PINs, passwords, and patterns are encrypted on this phone and never sent to the Bridge.</string>
     <string name="local_unlock_settings">Local unlock settings</string>
@@ -61,7 +86,7 @@
     <string name="view_releases">View releases</string>
     <string name="view_releases_detail">View all versions and downloads in a browser.</string>
     <string name="system_permissions">System permissions</string>
-    <string name="system_permissions_detail">These are Android\'s actual grants. Enabling a capability in the app does not replace a system grant.</string>
+    <string name="system_permissions_detail">These are Android\'s actual grants. Enabling a tool in the app does not replace a system grant.</string>
     <string name="permission_accessibility">Accessibility</string>
     <string name="permission_location">Location permission</string>
     <string name="permission_background_location">Background location</string>
@@ -106,7 +131,7 @@
     <string name="connected">Connected</string>
     <string name="revoke_detail">Access is stopped on this phone. The old Bridge identity will be revoked when the network returns, after which you can pair again.</string>
     <string name="unpaired_detail">Enter a Bridge address and pairing code to connect this phone.</string>
-    <string name="connected_detail">This phone is connected to the Bridge. Available capabilities depend on access control and system permissions.</string>
+    <string name="connected_detail">This phone is connected to the Bridge. Available tools depend on access control and system permissions.</string>
     <string name="reconnecting_detail">Access permissions are stored on this phone and remain in effect when the connection recovers.</string>
     <string name="unpair_title">Unpair this phone?</string>
     <string name="unpair_detail">Stop this phone\'s connection and access immediately. An encrypted revocation request is kept offline and sent when the network returns. Pairing again does not automatically resume access.</string>
@@ -130,7 +155,7 @@
     <string name="loading_apps">Loading app list…</string>
     <string name="batch_settings">Batch settings</string>
     <string name="enable_all_apps">Enable all listed apps</string>
-    <string name="enable_all_apps_success">Enabled all %1$d listed apps and all four capabilities; system grants and pause state are unchanged</string>
+    <string name="enable_all_apps_success">Enabled all %1$d listed apps and all tools; system grants and pause state are unchanged</string>
     <string name="catalog_error">Unable to read the app list. Reopen this page.</string>
     <string name="empty_apps">There are no apps in the list yet.\nUse “Add package” to configure one.</string>
     <string name="no_matching_apps">No matching apps.\nTry another name, clear the search, or add a package.</string>
@@ -145,7 +170,7 @@
     <string name="configure">Configure</string>
     <string name="invalid_package">Enter a valid package name for another app</string>
     <string name="allow_read_screenshot">Allow reading and screenshots</string>
-    <string name="read_screenshot_note">The corresponding capability and system permission are still required.</string>
+    <string name="read_screenshot_note">The corresponding tool and system permission are still required.</string>
     <string name="allow_open_operate">Allow opening and operating</string>
     <string name="operate_note">Includes tapping, input, swiping, and going back.</string>
     <string name="save">Save</string>
@@ -157,7 +182,7 @@
     <string name="local_unlock_title">Local unlock</string>
     <string name="local_unlock_subtitle">Credentials stay on this phone and are never sent to the Bridge or AI.</string>
     <string name="separate_authorization">Separate authorization</string>
-    <string name="separate_authorization_detail">The “Operate apps” capability and accessibility service are both required. When Shizuku enhancement is enabled, it is preferred while connected; accessibility is used otherwise. Pausing operations or all access stops unlock; enabling all capabilities does not enable this authorization.</string>
+    <string name="separate_authorization_detail">The phone_unlock tool and accessibility service are both required. When Shizuku enhancement is enabled, it is preferred while connected; accessibility is used otherwise. Pausing operations or all access stops unlock; enabling all tools does not enable this authorization.</string>
     <string name="allow_remote_unlock">Allow remote unlock requests</string>
     <string name="allow_remote_unlock_detail">Allow a paired AI to wake and unlock the phone using the local configuration.</string>
     <string name="configure_credentials">Configure credentials on the phone</string>
@@ -245,16 +270,16 @@ Go back and reopen this page.</string>
         <item quantity="other">%1$d apps configured · %2$d allow reading · %3$d allow operations</item>
     </plurals>
     <plurals name="app_permission_scope_count">
-        <item quantity="one">Enable reading, operations, and all four capabilities for all %1$d app, including filtered apps. System grants and pause state stay unchanged; unlisted and newly installed apps remain denied.</item>
-        <item quantity="other">Enable reading, operations, and all four capabilities for all %1$d apps, including filtered apps. System grants and pause state stay unchanged; unlisted and newly installed apps remain denied.</item>
+        <item quantity="one">Enable reading, operations, and all tools for all %1$d app, including filtered apps. System grants and pause state stay unchanged; unlisted and newly installed apps remain denied.</item>
+        <item quantity="other">Enable reading, operations, and all tools for all %1$d apps, including filtered apps. System grants and pause state stay unchanged; unlisted and newly installed apps remain denied.</item>
     </plurals>
     <plurals name="app_permission_scope_compact_count">
-        <item quantity="one">All: %1$d app and all four capabilities; system grants and pause state unchanged.</item>
-        <item quantity="other">All: %1$d apps and all four capabilities; system grants and pause state unchanged.</item>
+        <item quantity="one">All: %1$d app and all tools; system grants and pause state unchanged.</item>
+        <item quantity="other">All: %1$d apps and all tools; system grants and pause state unchanged.</item>
     </plurals>
     <plurals name="enable_all_apps_success_count">
-        <item quantity="one">Enabled %1$d listed app and all four capabilities; system grants and pause state are unchanged</item>
-        <item quantity="other">Enabled all %1$d listed apps and all four capabilities; system grants and pause state are unchanged</item>
+        <item quantity="one">Enabled %1$d listed app and all tools; system grants and pause state are unchanged</item>
+        <item quantity="other">Enabled all %1$d listed apps and all tools; system grants and pause state are unchanged</item>
     </plurals>
     <plurals name="batch_title_count">
         <item quantity="one">Batch settings for %1$d app</item>
@@ -379,6 +404,7 @@ Go back and reopen this page.</string>
     <string name="err_shizuku_launch_failed">Shizuku failed to launch the app: %1$d</string>
     <string name="err_pairing_http_status">Pairing failed (HTTP %1$d). Check the address, pairing code, and expiration.</string>
     <string name="err_capability_disabled">This capability is not enabled: %1$s</string>
+    <string name="err_tool_disabled">This tool is not enabled: %1$s</string>
     <string name="err_app_not_authorized">Access to app %1$s is not authorized</string>
     <string name="unlock_kind_pin">PIN</string>
     <string name="unlock_kind_password">Password</string>

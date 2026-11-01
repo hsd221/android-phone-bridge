@@ -158,7 +158,7 @@ class AppPermissionsActivity : Activity() {
         bulkButton = ui.button(getString(R.string.batch_settings), ButtonKind.PRIMARY, R.id.batch_app_permissions) { batchActions() }
         allButton = ui.button(getString(R.string.enable_all_apps), ButtonKind.SECONDARY, R.id.grant_everything) {
             save(resources.getQuantityString(R.plurals.enable_all_apps_success_count, apps.size, apps.size)) {
-                prefs.setPermissions(apps.associate { it.packageName to AppAccess(read = true, operate = true) }, Capability.entries.toSet())
+                prefs.setPermissions(apps.associate { it.packageName to AppAccess(read = true, operate = true) }, tools = BridgeTools.all.toSet())
                 selected.clear(); selected.addAll(apps.map { it.packageName })
             }
         }
