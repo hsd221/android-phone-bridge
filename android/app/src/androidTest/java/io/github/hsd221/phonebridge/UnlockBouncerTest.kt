@@ -161,7 +161,7 @@ class UnlockBouncerTest {
     }
 
     private fun cancelButton(view: View): Button? = when (view) {
-        is Button -> view.takeIf { it.text == "取消本次解锁" }
+        is Button -> view.takeIf { it.text == it.context.getString(R.string.cancel_unlock) }
         is ViewGroup -> (0 until view.childCount).firstNotNullOfOrNull { cancelButton(view.getChildAt(it)) }
         else -> null
     }
@@ -279,7 +279,7 @@ class UnlockBouncerTest {
                         if (phase == RevealPhase.FOUND_BOUNCER) { seedPartialInput(credential.kind); seeded++ }
                     }
                 }
-                assertEquals("锁屏输入框已有内容，请先在手机上处理", existingInput.message)
+                assertEquals(text(R.string.err_lock_field_not_empty), existingInput.message)
                 assertEquals("Existing-input check did not reach a known bouncer once", 1, seeded)
                 withContext(Dispatchers.Main) {
                     assertTrue("Automatic unlock changed the existing partial input", visibleEntries().any { it.isPassword && it.text?.length == 1 })
@@ -296,7 +296,7 @@ class UnlockBouncerTest {
                         if (phase == RevealPhase.BEFORE_SWIPE) swipesForExistingInput++
                     }
                 }
-                assertEquals("锁屏输入框已有内容，请先在手机上处理", preexistingInput.message)
+                assertEquals(text(R.string.err_lock_field_not_empty), preexistingInput.message)
                 assertEquals("An existing partial input opened the wake helper", 0, helpersForExistingInput)
                 assertEquals("An existing partial input triggered a reveal swipe", 0, swipesForExistingInput)
                 withContext(Dispatchers.Main) {
@@ -310,7 +310,7 @@ class UnlockBouncerTest {
                     val noCredential = denied("USER_UNLOCK_REQUIRED", allowExistingInput = true) {
                         localUnlock { if (it == RevealPhase.WAKE_READY) unexpectedHelpers++ }
                     }
-                    assertEquals("请在手机上完成当前系统解锁", noCredential.message)
+                    assertEquals(text(R.string.err_current_unlock_required), noCredential.message)
                     assertEquals("An existing keypad without local credentials opened a helper", 0, unexpectedHelpers)
                     assertDiagnostics("not_requested", "USER_UNLOCK_REQUIRED", credentialAttempted = false, revealAttempted = false)
                     store.save(credential)
@@ -352,10 +352,12 @@ class UnlockBouncerTest {
                 sleepAndLock()
                 var cancelledAtWake = 0
                 var revealAfterCancel = 0
+                var expectedCancellation: String? = null
                 val failure = denied("USER_UNLOCK_REQUIRED") {
                     localUnlock { phase ->
                         if (phase == RevealPhase.WAKE_READY) {
                             val helper = UnlockActivity.current!!
+                            expectedCancellation = helper.getString(R.string.unlock_cancelled)
                             if (cancelWithButton) {
                                 val button = cancelButton(helper.window.decorView)
                                 assertNotNull("Local unlock cancellation button is missing", button)
@@ -368,7 +370,7 @@ class UnlockBouncerTest {
                         } else if (phase == RevealPhase.BEFORE_SWIPE) revealAfterCancel++
                     }
                 }
-                assertEquals("本次解锁已在手机上取消", failure.message)
+                assertEquals(requireNotNull(expectedCancellation), failure.message)
                 assertEquals(1, cancelledAtWake)
                 assertEquals("An explicitly cancelled helper continued to reveal credentials", 0, revealAfterCancel)
                 assertDiagnostics("wake_only", "USER_UNLOCK_REQUIRED", credentialAttempted = false, revealAttempted = false)
