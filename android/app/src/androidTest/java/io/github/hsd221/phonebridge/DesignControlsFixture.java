@@ -31,17 +31,21 @@ public class DesignControlsFixture extends Activity {
         super.onCreate(state);
         if (getIntent().getBooleanExtra("close", false)) { finish(); return; }
         TextView status = new TextView(this);
+        status.setTextSize(14);
+        status.setSingleLine(true);
         updateStatus(status, "fixture ready");
         status.setContentDescription("fixture status");
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(32, 80, 32, 32);
+        body.setPadding(16, 16, 16, 16);
         body.addView(status);
         TextView touch = new TextView(this);
+        touch.setTextSize(14);
+        touch.setSingleLine(true);
         touch.setText("touch pending");
         touch.setContentDescription("fixture touch status");
         body.addView(touch);
-        body.addView(new HiddenParentView(this), new LinearLayout.LayoutParams(-1, 160));
+        body.addView(new HiddenParentView(this), new LinearLayout.LayoutParams(-1, 60));
         Button button = new Button(this) {
             private long down;
             private long downWall;
@@ -65,6 +69,7 @@ public class DesignControlsFixture extends Activity {
         first.setId(0x00f00001);
         first.setContentDescription("fixture first input");
         first.setSingleLine();
+        first.setTextSize(14);
         first.setImeOptions(EditorInfo.IME_ACTION_DONE);
         first.setOnEditorActionListener((view, action, event) -> { updateStatus(status, "editor submitted"); return true; });
         body.addView(first);
@@ -72,6 +77,7 @@ public class DesignControlsFixture extends Activity {
         second.setId(0x00f00002);
         second.setContentDescription("fixture second input");
         second.setSingleLine();
+        second.setTextSize(14);
         first.setNextFocusForwardId(second.getId());
         second.setNextFocusForwardId(first.getId());
         body.addView(second);
@@ -90,11 +96,11 @@ public class DesignControlsFixture extends Activity {
             super(context);
             setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
             paint.setColor(0xff111111);
-            paint.setTextSize(32);
+            paint.setTextSize(20);
         }
         @Override public void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            canvas.drawText(label, 10, 70, paint);
+            canvas.drawText(label, 10, 35, paint);
         }
         private void changed(String value) {
             label = value;

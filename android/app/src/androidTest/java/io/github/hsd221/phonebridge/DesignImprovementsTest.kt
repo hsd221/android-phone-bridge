@@ -94,7 +94,9 @@ class DesignImprovementsTest {
             val focus = root.findFocus(android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT) ?: return@eventually false
             if (focus.contentDescription?.toString() != "fixture first input") return@eventually false
             val next = focus.focusSearch(android.view.View.FOCUS_FORWARD) ?: return@eventually false
-            next.contentDescription?.toString() == "fixture second input" && next.isVisibleToUser && next.isEnabled
+            val ready = next.contentDescription?.toString() == "fixture second input" && next.isVisibleToUser && next.isEnabled
+            if (ready) note("Synthetic TAB focus bounds: first=${android.graphics.Rect().also(focus::getBoundsInScreen)}, next=${android.graphics.Rect().also(next::getBoundsInScreen)}")
+            ready
         }
     }
     private fun ui(expected: String? = null): JSONObject {
