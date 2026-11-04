@@ -80,6 +80,10 @@ class ShizukuUnlockTest {
         listOf(fixturePackage, "com.android.systemui", "com.android.launcher3", "com.android.inputmethod.latin").forEach {
             prefs.setApp(it, AppAccess(read = true, operate = true))
         }
+        android.content.ComponentName.unflattenFromString(android.provider.Settings.Secure.getString(
+            context.contentResolver, android.provider.Settings.Secure.DEFAULT_INPUT_METHOD).orEmpty())?.packageName?.let {
+            prefs.setApp(it, AppAccess(read = true, operate = true))
+        }
         prefs.setTools(true)
         shell("am start -n $fixturePackage/${DesignControlsFixture::class.java.name}")
         fun nodes(): List<JSONObject> {
@@ -132,6 +136,18 @@ class ShizukuUnlockTest {
             nodes().any { it.optString("description") == "fixture second input" && it.optBoolean("focused") }
         }
         input { it.key("BACK") }
+        eventually("IME windows did not settle after ADB BACK") {
+            if (PhoneAccessibilityService.instance!!.windows.any {
+                    it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD
+                }) return@eventually false
+            try {
+                PhoneAccessibilityService.instance!!.authorizedRoot("phone_key")
+                true
+            } catch (failure: ToolFailure) {
+                if (failure.code !in setOf("WINDOW_UNAVAILABLE", "UI_UNAVAILABLE")) throw failure
+                false
+            }
+        }
         input { it.key("HOME") }
         eventually("ADB HOME did not activate the launcher") {
             PhoneAccessibilityService.instance?.rootInActiveWindow?.packageName?.toString() == "com.android.launcher3"

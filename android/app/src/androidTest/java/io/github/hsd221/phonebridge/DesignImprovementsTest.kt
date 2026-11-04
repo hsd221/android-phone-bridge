@@ -71,6 +71,20 @@ class DesignImprovementsTest {
                 ?.use { it.moveToFirst() && it.getString(0) == expected } == true
         }
     }
+    private fun navigationReady(waitForImeDismissal: Boolean = false) {
+        eventually("Navigation windows did not settle after the previous action") {
+            if (waitForImeDismissal && PhoneAccessibilityService.instance!!.windows.any {
+                    it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD
+                }) return@eventually false
+            try {
+                PhoneAccessibilityService.instance!!.authorizedRoot("phone_key")
+                true
+            } catch (failure: ToolFailure) {
+                if (failure.code !in setOf("WINDOW_UNAVAILABLE", "UI_UNAVAILABLE")) throw failure
+                false
+            }
+        }
+    }
     private fun ui(expected: String? = null): JSONObject {
         var last = JSONObject()
         try {
@@ -121,6 +135,10 @@ class DesignImprovementsTest {
             prefs.shizukuEnabled = false
             for (name in listOf(fixturePackage, "com.android.systemui", "com.android.launcher3", "com.android.inputmethod.latin")) {
                 prefs.setApp(name, AppAccess(read = true, operate = true))
+            }
+            android.content.ComponentName.unflattenFromString(android.provider.Settings.Secure.getString(
+                context.contentResolver, android.provider.Settings.Secure.DEFAULT_INPUT_METHOD).orEmpty())?.packageName?.let {
+                prefs.setApp(it, AppAccess(read = true, operate = true))
             }
             ActivityScenario.launch(MainActivity::class.java).use {
                 instrumentation.runOnMainSync { BridgeService.start(context) }
@@ -173,6 +191,7 @@ class DesignImprovementsTest {
             denied("OPERATIONS_PAUSED", "phone_key", JSONObject().put("key", "BACK"))
             prefs.setFlag("pausedOperations", false)
             ok("phone_key", JSONObject().put("key", "BACK"))
+            navigationReady(waitForImeDismissal = true) // Observe IME dismissal before sending a distinct global action.
             ok("phone_key", JSONObject().put("key", "HOME"))
             eventually("HOME did not leave the fixture") {
                 PhoneAccessibilityService.instance?.rootInActiveWindow?.packageName?.toString() == "com.android.launcher3"
@@ -186,6 +205,7 @@ class DesignImprovementsTest {
             denied("APP_DENIED", "phone_key", JSONObject().put("key", "BACK"))
             prefs.setApp("com.android.settings", AppAccess(read = true, operate = true))
             denied("APP_CHANGED", "phone_back", JSONObject().put("packageName", fixturePackage))
+            navigationReady()
             ok("phone_key", JSONObject().put("key", "BACK"))
             note("PASS: HOME/BACK/ENTER/TAB and app/pause boundaries remain enforced.")
             completed = true
