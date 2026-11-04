@@ -7,4 +7,5 @@ interface IAdbTools {
     int swipe(int fromX, int fromY, int toX, int toY, int durationMs);
     int inputText(String text);
     int back();
+    int key(String key);
 }

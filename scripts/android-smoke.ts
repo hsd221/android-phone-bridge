@@ -76,6 +76,16 @@ try {
   await adb('shell', 'settings', 'put', 'secure', 'enabled_accessibility_services', component);
   await adb('shell', 'settings', 'put', 'secure', 'accessibility_enabled', '1');
   await adb('emu', 'geo', 'fix', '-74.0060', '40.7128');
+  const designPair = bridge.identities.createPairing();
+  const design = await adb('shell', 'am', 'instrument', '-w', '-r', '-e', 'class', 'io.github.hsd221.phonebridge.DesignImprovementsTest',
+    '-e', 'designImprovementsTest', 'true', '-e', 'bridgeUrl', config.publicUrl, '-e', 'pairCode', designPair.code,
+    '-e', 'harnessToken', token, 'io.github.hsd221.phonebridge.test/androidx.test.runner.AndroidJUnitRunner');
+  process.stdout.write(design);
+  if (!design.includes('OK (1 test)') || design.includes('FAILURES')) throw new Error('Design improvement regression tests failed');
+  await resetBridge();
+  for (const permission of ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'ACCESS_BACKGROUND_LOCATION', 'POST_NOTIFICATIONS']) {
+    await adb('shell', 'pm', 'grant', 'io.github.hsd221.phonebridge', `android.permission.${permission}`);
+  }
   const pair = bridge.identities.createPairing();
   const result = await adb('shell', 'am', 'instrument', '-w', '-r', '-e', 'class', 'io.github.hsd221.phonebridge.DeviceSmokeTest',
     '-e', 'bridgeUrl', config.publicUrl, '-e', 'pairCode', pair.code, '-e', 'harnessToken', token,

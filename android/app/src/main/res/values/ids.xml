@@ -1,4 +1,5 @@
 <resources>
+    <item name="tool_key" type="id" />
     <item type="id" name="live_updates_enabled" />
     <item type="id" name="live_updates_status" />
     <item type="id" name="live_updates_system_settings" />

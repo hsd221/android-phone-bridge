@@ -128,7 +128,7 @@ Bridge 将来自 MCP 的工具调用封装为 JSON 请求包发送给手机端�
 
 ### 2. 工具列表与坐标体系
 
-协议目前支持 16 项核心工具（具体参数详见 `bridge/src/protocol.ts`）：
+协议目前支持 17 项核心工具（具体参数详见 `bridge/src/protocol.ts`）：
 - `phone_status`：查询设备连接状态、Android 系统版本、两级暂停标志、逐工具权限、按应用授权清单及 Shizuku 运行状态。`tools` 是以 `phone_*` 为键的逐项授权结果；`capabilities` 作为旧客户端兼容字段保留。`appVersion` 与 `appVersionCode` 标识手机 APK 版本，便于确认升级；`screen` 包含亮屏、键盘锁、设备锁与首解状态；`unlock` 包含独立授权、是否配置本地凭据、是否阻止重试及固定的最近尝试状态，不包含凭据、节点或屏幕内容。
 - `phone_device_info`：返回型号、Android 版本、安全补丁、电量、充电状态、屏幕尺寸、密度、语言与时区。
 - `phone_apps`：列出可启动应用及版本；`includeSystem` 为 `true` 时包含系统应用。仅返回系统可见的启动入口，不读取应用私有数据。
@@ -137,23 +137,31 @@ Bridge 将来自 MCP 的工具调用封装为 JSON 请求包发送给手机端�
 - `phone_media`：按 `images`、`videos` 或 `all` 列出共享媒体元数据；必须授予对应 Android 媒体读取权限，不返回媒体内容。
 - `phone_unlock`：空参数 `{}`，唤醒并使用手机本地配置请求解锁。需要 `phone_unlock` 工具授权及独立解锁授权，受两级暂停控制。开启全部工具不会开启此授权。PIN、密码与图案不属于协议字段，任何额外参数都会被拒绝。成功返回 `unlocked: true`、`path` 与屏幕状态；`path` 区分 `already_unlocked`、`system`、`local_credential` 和 `shizuku`。Shizuku 未连接或输入前不可用时可回退无障碍，已开始凭据输入则不切换路径重试；需要人工或系统不支持时明确返回错误，不能盲目重试。
 - `phone_location`：获取设备当前定位（经纬度、精度及时间戳）。
-- `phone_ui`：获取当前可见窗口的无障碍节点树与文本内容。
+- `phone_ui`：获取当前可见窗口的无障碍节点树与文本内容。不可见父容器不会截断其可见后代；返回节点包含 `clickable` 和 `longClickable`，隐藏节点不进入结果。遍历仍受节点与访问数量上限约束，并校验窗口和可见控件的所属应用授权。
 - `phone_screenshot`：获取屏幕截屏（返回图片 Base64 与物理分辨率元数据）。
 - `phone_open_app`：启动指定包名的应用。
-- `phone_tap`：根据屏幕物理坐标模拟轻触。
+- `phone_tap`：指定最新 UI 的 `nodeId` 或屏幕物理坐标 `x`、`y`（两者互斥），可选 `durationMs` 为 50–2000 毫秒，默认 50。坐标模式按持续时间派发手势，ADB 路径用同点滑动实现长按；节点模式在持续时间至少 500 毫秒时请求 `ACTION_LONG_CLICK`，其余请求 `ACTION_CLICK`。节点动作由应用处理，不保证精确持续时间；不支持对应动作的节点返回 `ACTION_UNAVAILABLE`。
 - `phone_swipe`：指定起始与终点坐标模拟滑动。
 - `phone_input`：向当前聚焦的文本框输入字符。
 - `phone_back`：触发系统物理返回键。
+- `phone_key`：`key` 仅允许 `HOME`、`BACK`、`ENTER`、`TAB`；可选 `packageName` 用于断言预期前台应用。省略包名时按实际前台执行，适合已授权的系统弹窗，不受原应用包名变化影响。所有可见窗口仍须获得操作授权，锁屏和桥接设置仍不可操作，并且必须启用无障碍服务以核验窗口。Shizuku 可用时发送固定按键；无障碍回退使用全局 Home/Back、非密码可编辑焦点的 IME Enter、或向前移动输入焦点，缺少适用焦点时明确拒绝。ENTER 可能提交表单；调用后重新观察 UI。
 
-坐标点击、滑动、无节点文本输入和返回会先使用受限的 ADB 等效输入通道（非 Root Shizuku shell UID 2000）；通道在动作开始前不可用时才回退到无障碍。节点操作、无法安全编码的多行输入和已开始但结果不明的动作不会换路重放。`phone_status.permissions` 与设置页显示 `adbInput`、`notificationAccess`、`mediaImages` 和 `mediaVideos` 的实际状态。
+坐标点击与长按、滑动、无节点文本输入、返回和通用按键会先使用受限的 ADB 等效输入通道（非 Root Shizuku shell UID 2000）；通道在动作开始前不可用时才回退到无障碍。节点操作、无法安全编码的多行输入和已开始但结果不明的动作不会换路重放。`phone_status.permissions` 与设置页显示 `adbInput`、`notificationAccess`、`mediaImages` 和 `mediaVideos` 的实际状态。
+
+`phone_status` 的响应还包含 `bridge: {version, protocol, supportedTools}`，分别标识运行中服务端的版本、协议和工具名。注册不代表手机已支持或授权工具，仍须结合 APK 版本及手机 `tools` 检查。手机离线时，状态查询仍成功返回 `connected: false` 与 `bridge`，省略不可取得的手机状态字段。
 
 `unlock.lastAttempt` 为 `null` 或包含以下六个固定状态字段的对象：`stage`（`checking`、`waking`、`waiting_for_bouncer`、`waiting_for_keyguard`、`revealing`、`preflight`、`entering_credential`、`verifying`）、`outcome`（`RUNNING`、`SUCCESS` 或解锁/权限/取消错误码）、`systemDismiss`（`not_requested`、`wake_only`、`system`）、`revealAttempted`、`credentialAttempted` 与 `reason`。`reason` 为 `none`、`unrecognized`、`container_unavailable`、`entry_unavailable`、`entry_not_protected`、`entry_not_editable`、`entry_not_empty`、`entry_empty_state_unknown`、`digit_control_unavailable`、`confirm_control_unavailable`、`auto_confirm_unverified`、`password_action_unavailable` 、`pattern_bounds_invalid`、`back_control_missing`、`back_control_hidden`、`back_control_disabled`、`back_control_ambiguous` 或 `back_control_not_actionable`。它只存在手机进程内存中，关闭解锁授权或解除配对时清空；不包含错误正文、节点内容、输入长度与凭据。
 
 > **坐标换算说明**：  
 > 触摸与手势操作均基于手机主屏幕的物理像素坐标。调用 `phone_screenshot` 时，为了节省带宽，返回的截图可能经过等比缩放。MCP 会在返回图像的同时附带 `displayWidth`、`displayHeight` 以及图片的实际 `width`、`height`。  
+> 响应还提供 `scaleX = width / displayWidth`、`scaleY = height / displayHeight`，按最终图片尺寸计算，包含缩放后的整数取整结果。
+>
 > 换算公式为：  
-> `实际 X = x * displayWidth / width`  
-> `实际 Y = y * displayHeight / height`
+> `实际 X = round(x / scaleX)`
+>
+> `实际 Y = round(y / scaleY)`
+>
+> 点击坐标必须位于屏幕及目标窗口范围内；像素索引从 0 开始。
 
 ---
 
@@ -210,6 +218,13 @@ Bridge 可主动发送取消消息：
 | :--- | :--- |
 | `PHONE_OFFLINE` | 手机当前未连接到 Bridge。 |
 | `BRIDGE_UNAVAILABLE` | Bridge 内部服务异常或请求转发失败。 |
+| `TOOL_NOT_SUPPORTED_BY_BRIDGE` | 运行中的 Bridge 未注册此工具，需更新构建并重启常驻服务。兼容识别旧 Bridge 的 HTTP 400 `Unknown tool`。 |
+| `BRIDGE_AUTH_FAILED` | Bridge 拒绝 Harness 凭证（HTTP 401）。 |
+| `BRIDGE_ACCESS_DENIED` | Bridge 拒绝 Host、Origin 或访问策略（HTTP 403）。 |
+| `BRIDGE_ENDPOINT_NOT_FOUND` | Bridge API 路径不存在（HTTP 404），应检查地址与服务版本。 |
+| `BRIDGE_PROTOCOL_ERROR` | Bridge 的成功响应不符合工具结果格式。若动作结果未知，不可自动重试。 |
+| `INVALID_ARGUMENT` | 参数格式、范围或组合无效，派发前已拒绝。 |
+| `ACTION_UNAVAILABLE` | 当前节点或焦点不支持所请求的动作。 |
 | `TIMEOUT` | 请求在指定超时时间内未收到响应。 |
 | `CANCELLED` | 请求在排队期间被显式取消或被用户事件打断。 |
 | `EXPIRED` | 请求到达手机端时已超出过期时间戳。 |
@@ -253,8 +268,8 @@ Bridge 对外提供以下 HTTP / stdio 接口供外部 Agent 接入：
 3. **`POST /api/call`**：
    - 用于调试的直接调用入口，同样需要 Harness 鉴权，请求体为 `{"tool":"phone_status","args":{}}`。
 4. **`GET /admin/status`**：
-   - 返回当前设备的在线状态与已配对设备元信息（设备 ID 与标签，不泄露设备令牌与私有数据；协议版本请通过 `GET /health` 获取）。
+   - 返回当前设备的在线状态、已配对设备元信息及 `bridge: {version, protocol, supportedTools}`，不泄露设备令牌。
 5. **`GET /health`**：
-   - 基础存活探针，返回服务就绪状态。
+   - 基础存活探针，返回 `{ok, protocol, version}`。
 
 > **安全过滤**：Bridge 会严格校验 HTTP 请求中的 `Host` 与 `Origin`，直接拒绝非预期的跨站请求或未信任域名调用。

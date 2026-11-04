@@ -61,7 +61,9 @@ test('one-time pairing survives restart, separates identities, and revokes an ac
     assert.equal((await fetch(`${f.base}/device/revoke`, { method: 'DELETE', headers: { authorization: `Bearer ${identity.token}` } })).status, 200);
     await closed;
     assert(!new IdentityStore(f.config.stateFile).authenticate(identity.token));
-    assert.equal((await f.call('phone_status')).error.code, 'PHONE_OFFLINE');
+    const offline = await f.call('phone_status');
+    assert.equal(offline.ok, true);
+    assert.equal(offline.data.connected, false);
   } finally { await f.close(); }
 });
 
@@ -94,7 +96,7 @@ test('real MCP client lists and calls phone tools, including image content', asy
     });
     await client.connect(new StreamableHTTPClientTransport(new URL(`${f.base}/mcp`), { requestInit: { headers: f.auth } }));
     const tools = await client.listTools();
-    assert.equal(tools.tools.length, 16);
+    assert.equal(tools.tools.length, 17);
     for (const name of ['phone_device_info', 'phone_apps', 'phone_notifications', 'phone_clipboard', 'phone_set_clipboard', 'phone_media']) {
       assert(tools.tools.some(tool => tool.name === name), `missing ${name}`);
     }
@@ -223,9 +225,11 @@ test('stdio CLI forwards MCP calls to the running authenticated bridge', async (
     await writeFile(configPath, JSON.stringify({ ...f.config, port: Number(new URL(f.base).port), publicUrl: f.base }));
     await client.connect(new StdioClientTransport({ command: process.execPath,
       args: ['--import', 'tsx', 'bridge/src/cli.ts', 'mcp', '--config', configPath] }));
-    assert.equal((await client.listTools()).tools.length, 16);
+    assert.equal((await client.listTools()).tools.length, 17);
     const result = await client.callTool({ name: 'phone_status', arguments: {} });
-    assert.equal(result.isError, true);
-    assert.equal(JSON.parse((result.content as any[])[0].text).error.code, 'PHONE_OFFLINE');
+    assert.equal(result.isError, false);
+    const offline = JSON.parse((result.content as any[])[0].text);
+    assert.equal(offline.ok, true);
+    assert.equal(offline.data.connected, false);
   } finally { await client.close(); await f.close(); }
 });

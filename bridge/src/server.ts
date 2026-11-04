@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { PhoneBroker } from './broker.js';
 import { IdentityStore, secureEqual } from './identity.js';
 import { createMcpServer } from './mcp.js';
-import { isTool } from './protocol.js';
+import { bridgeInfo, failure, isTool, PROTOCOL_VERSION, BRIDGE_VERSION } from './protocol.js';
 import type { Config } from './config.js';
 
 class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
@@ -48,7 +48,7 @@ export function createBridge(config: Config) {
   server.on('request', (req, res) => { void (async () => {
     if (!validRequestOrigin(req)) throw new HttpError(403, 'Host or Origin rejected');
     const path = new URL(req.url ?? '/', config.publicUrl).pathname;
-    if (path === '/health' && req.method === 'GET') return json(res, 200, { ok: true, protocol: 1 });
+    if (path === '/health' && req.method === 'GET') return json(res, 200, { ok: true, protocol: PROTOCOL_VERSION, version: BRIDGE_VERSION });
     if (path === '/pair' && req.method === 'POST') {
       if (Date.now() >= attemptReset) { pairAttempts = 0; attemptReset = Date.now() + 60000; }
       if (++pairAttempts > 30) throw new HttpError(429, 'Too many pairing attempts; wait one minute');
@@ -73,11 +73,11 @@ export function createBridge(config: Config) {
     }
     if (path === '/admin/status' && req.method === 'GET') {
       const device = identities.device;
-      return json(res, 200, { online: broker.online, device: device ? { deviceId: device.deviceId, label: device.label, pairedAt: device.pairedAt } : null });
+      return json(res, 200, { online: broker.online, bridge: bridgeInfo(), device: device ? { deviceId: device.deviceId, label: device.label, pairedAt: device.pairedAt } : null });
     }
     if (path === '/api/call' && req.method === 'POST') {
       const input = z.object({ tool: z.string(), args: z.unknown() }).strict().parse(await body(req));
-      if (!isTool(input.tool)) throw new HttpError(400, 'Unknown tool');
+      if (!isTool(input.tool)) return json(res, 400, failure('TOOL_NOT_SUPPORTED_BY_BRIDGE', 'This Bridge does not support the requested tool; update and restart the Bridge'));
       const abort = new AbortController();
       res.once('close', () => { if (!res.writableEnded) abort.abort(); });
       return json(res, 200, await broker.call(input.tool, input.args, abort.signal));

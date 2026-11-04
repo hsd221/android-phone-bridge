@@ -24,6 +24,8 @@ cd android
 ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest :demo:assembleDebug
 ```
 
+正式构建还需执行 `./gradlew :app:lintRelease :app:assembleRelease`，签名环境变量见部署文档。交付前核对 APK 的版本、证书、非调试标志与附件 SHA-256；测试夹具仅编入独立测试 APK。
+
 ### 2. 测试覆盖内容
 - **Bridge 服务端测试**：
   - 测试套件会在本地临时启动真实 HTTP 与 WebSocket 监听；
@@ -55,6 +57,7 @@ npm run test:android -- emulator-5554 --shizuku
 
 - **权限管理专项测试 (`PermissionManagementTest`)**：自动化脚本会优先执行三组权限 UI 测试，覆盖应用搜索、跨筛选多选、页面重建/屏幕旋转、四类批量操作以及“一键全开”的影响范围，测试结束后会自动清理沙箱数据。
 - **断网恢复自愈验证**：测试过程中会自动切断模拟器的 Wi-Fi 与数据网络，并在稍后恢复，验证 APK 在不重新打开页面的情况下能够自动重新连接 Bridge 并继续响应后续的 MCP 调用。
+- **交互设计回归 (`DesignImprovementsTest`)**：在独立测试 APK 中构造“不可见容器 → 可见虚拟控件”，通过真实 MCP 验证子节点读取及节点动作；同时覆盖节点与坐标长按、HOME/BACK/ENTER/TAB、截图实际缩放比例、包名变化、逐应用操作授权与暂停拒绝。测试仅在显式选择的专用模拟器上执行，并拒绝接管已有手机配对身份。
 
 ### 2. 开机冷启动恢复测试
 ```sh
@@ -65,25 +68,24 @@ npm run test:android:boot -- emulator-5554
 
 ---
 
-## 三、当前测试矩阵与通过情况
+## 三、自动化覆盖与验证范围
 
-| 测试项 / 场景 | 测试环境 / 工具链 | 结果 |
+| 检查项 | 环境与范围 | 执行入口 |
 | :--- | :--- | :--- |
-| **Bridge 类型检查、构建与 MCP 集成测试** | Ubuntu 24.04.5 / Node.js 22.23.2 | ✅ 8 项测试全部通过 |
-| **Android JVM 权限与生命周期测试** | OpenJDK 17 / Gradle 8.11.1 | ✅ 3 组测试全部通过 |
-| **Android Debug 构建与静态代码 Lint** | compileSdk 35 / targetSdk 35 | ✅ 成功构建，Lint 零 Warning/Error |
-| **0.1.1 权限管理 UI 与系统状态监听** | API 35 专用测试模拟器 | ✅ 三组测试全部通过（覆盖批量授权、全开范围、横屏小屏适配及状态实时刷新） |
-| **安装包生成（主应用 / 测试应用）** | minSdk 30 (Android 11+) | ✅ 成功输出 `app-debug.apk` 与 `demo-debug.apk` |
-| **Android 15 模拟器 MCP 完整闭环** | API 35 官方镜像 | ✅ 端到端测试通过，耗时约 21.3 秒 |
-| **可选 Shizuku 增强链路闭环** | Shizuku 13.6.0 / 非 Root (UID 2000) | ✅ 端到端测试通过，耗时约 24.4 秒 |
-| **网络中断与后台静默恢复** | API 35 模拟器（开关网络环境） | ✅ 验证通过，网络恢复后连接自动愈合 |
-| **开机自启动与后台恢复** | API 35 模拟器（无 PIN 锁环境） | ✅ 验证通过，重启后独立 MCP 成功调通定位、后台启动与界面读取 |
-| **GitHub Actions CI 跨平台流水线** | `ubuntu-latest` / `windows-latest` | ✅ Bridge 服务端在 Ubuntu/Windows 双平台通过；Android 构建与模拟器闭环在 Ubuntu 上通过 |
-| **Windows 11 本地真机部署** | 外部待测设备 | ⏳ 待有 Windows 11 实机的测试者反馈 |
-| **物理真机局域网连通与工具首测** | 小米 23113RKC6C (Android 15 / API 36) | ✅ 配对与 MCP 9 项工具列出正常；精准定位耗时 2.65s 成功返回（精度 44m，非模拟）；默认按应用授权被正确拒绝；读屏被第三方悬浮窗应用拦截，已在无障碍服务中增强窗口来源诊断；当前真机联调主动暂停待后续推进 |
-| **物理真机长期休眠、切网与 PIN 首解前可用性** | 外部待测实体设备 | ⏳ 待真机联调恢复后继续验证 |
+| Bridge 类型检查、构建与 MCP 集成 | Node.js 22；Ubuntu / Windows；HTTP 与 stdio、旧 Bridge 错误分类、版本与工具发现、严格参数及结果未知标记 | `npm run check`、`npm test`、`npm run build` |
+| Android JVM | JDK 17 / Gradle 8.11.1；权限、请求门禁、本地凭据、版本比较与调用状态 | `:app:testDebugUnitTest` |
+| Android Debug / Release | compileSdk 36 / targetSdk 35；两种构建及 Lint，独立测试 APK 和 Demo APK | `:app:lintDebug`、`:app:lintRelease`、`:app:assembleDebug`、`:app:assembleRelease` |
+| 模拟器 MCP 与界面 | API 35、36、36.1；权限管理、调用通知、自动更新、读屏、截图、手势、输入、授权拒绝与断网恢复 | `npm run test:android -- <serial>` |
+| 新增交互设计 | 不可见父节点的可见后代、节点与坐标长按、四种按键、缩放比例、实际前台及暂停授权 | `DesignImprovementsTest`（由 smoke 脚本启动） |
+| 冷启动与本地解锁 | API 35 专用模拟器；重启后台恢复及本地合成锁屏凭据 | `test:android:boot`、`test:android:unlock` |
+| 非 Root Shizuku | API 35 专用模拟器，shell UID 2000；本地解锁、固定输入通道、断连与降级边界 | `test:android:unlock:shizuku` |
+| 交付 APK | 版本与递增 versionCode、原证书兼容、非调试标志、无测试夹具或运行配置、远端附件 SHA-256 | 发布前本地包审计及发布后重新下载核验 |
 
-> **CI 说明**：远程 GitHub Actions 构建环境显式指定了 `platform-tools`、`platforms;android-35` 及 `build-tools;35.0.0`，保证了构建环境的可重现性。
+具体提交的执行结果见仓库 [GitHub Actions](https://github.com/hsd221/android-phone-bridge/actions)。Lint 通过表示未发现阻止构建的错误，不代表没有警告；SDK、依赖及兼容性警告仍按实际报告记录。
+
+新增交互功能的自动化验证使用独立模拟器和合成内容。本版未重新执行物理真机回归，尚不能据此确认 HyperOS 等厂商系统的全部行为、长期休眠与切网恢复；Windows 11 本地真机部署也需要实际设备验证。
+
+> **CI 说明**：远程 GitHub Actions 构建环境显式指定 `platform-tools`、`platforms;android-35`、`platforms;android-36` 及 `build-tools;35.0.0`。Bridge 在 Ubuntu 与 Windows 上检查；Android 检查 Debug/Release 构建与 Lint，模拟器矩阵为 API 35、36、36.1，API 35 还执行开机恢复、本地解锁及非 Root Shizuku 专项。
 
 ---
 

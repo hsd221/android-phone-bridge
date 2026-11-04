@@ -59,7 +59,7 @@ class ShizukuSupport(private val context: Context) {
     suspend fun input(action: (IAdbTools) -> Int, ensure: () -> Unit): JSONObject? {
         if (!status().optBoolean("available")) return null
         val args = Shizuku.UserServiceArgs(ComponentName(context, ShizukuAdbService::class.java))
-            .daemon(false).processNameSuffix("adb-input").version(1)
+            .daemon(false).processNameSuffix("adb-input").version(2)
         var connection: ServiceConnection? = null
         try {
             val adb = withTimeout(5000) {

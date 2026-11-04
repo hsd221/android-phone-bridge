@@ -1,4 +1,4 @@
-name: Demo checks
+name: Checks
 on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
@@ -30,7 +30,7 @@ jobs:
         with:
           packages: platform-tools platforms;android-35 platforms;android-36 build-tools;35.0.0
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :demo:assembleDebug
+      - run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:lintRelease :app:assembleDebug :app:assembleRelease :demo:assembleDebug
         working-directory: android
       - uses: actions/upload-artifact@v4
         with:

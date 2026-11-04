@@ -17,6 +17,8 @@ import android.os.SystemClock
 import android.provider.MediaStore
 import android.view.WindowManager
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
@@ -46,6 +48,7 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
             "phone_swipe" -> swipe(args, ensure)
             "phone_input" -> input(args, ensure)
             "phone_back" -> back(args, ensure)
+            "phone_key" -> key(args, ensure)
             "phone_open_app" -> openApp(args.getString("packageName"), ensure)
             else -> throw ToolFailure("UNKNOWN_TOOL", text(R.string.err_unknown_tool))
         }
@@ -174,7 +177,8 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
         if (args.has("nodeId")) return (accessibility ?: throw ToolFailure("ACCESSIBILITY_UNAVAILABLE", text(R.string.err_accessibility_required))).tap(args, ensure)
         authorizeAdbOrAccessibility(accessibility, "phone_tap", args.getString("packageName"))
         checkDisplayPoint(args.getInt("x"), args.getInt("y"))
-        return shizukuInput(ensure) { it.tap(args.getInt("x"), args.getInt("y")) }
+        val x = args.getInt("x"); val y = args.getInt("y"); val duration = args.optInt("durationMs", 50)
+        return shizukuInput(ensure) { if (duration == 50) it.tap(x, y) else it.swipe(x, y, x, y, duration) }
             ?: (accessibility ?: throw ToolFailure("ACCESSIBILITY_UNAVAILABLE", text(R.string.err_accessibility_required))).tap(args, ensure)
     }
 
@@ -203,10 +207,31 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
             ?: (accessibility ?: throw ToolFailure("ACCESSIBILITY_UNAVAILABLE", text(R.string.err_accessibility_required))).back(args, ensure)
     }
 
+    private suspend fun key(args: JSONObject, ensure: () -> Unit): JSONObject {
+        // Global keys must verify the actual foreground and every visible window,
+        // including when no expected package was supplied or Shizuku is available.
+        val accessibility = accessibility()
+        val verify = {
+            ensure()
+            accessibility.authorizedRoot("phone_key", args.optString("packageName").takeIf { args.has("packageName") })
+            Unit
+        }
+        verify()
+        val key = args.getString("key")
+        val result = shizukuInput(verify) { it.key(key) } ?: return accessibility.key(args, ensure)
+        accessibility.invalidate()
+        return result.put("key", key)
+    }
+
     private suspend fun shizukuInput(ensure: () -> Unit, action: (IAdbTools) -> Int): JSONObject? =
         if (!prefs.shizukuEnabled) null else try { shizuku.input(action, ensure) } catch (failure: ToolFailure) {
             if (failure.code == "SHIZUKU_UNAVAILABLE") null else throw failure
-        } catch (_: kotlinx.coroutines.TimeoutCancellationException) { null }
+        } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
+            // Only a pre-dispatch binding timeout can fall back. An expired or
+            // cancelled parent request must never dispatch through another path.
+            currentCoroutineContext().ensureActive()
+            null
+        }
 
     private fun authorizeAdbOrAccessibility(accessibility: PhoneAccessibilityService?, tool: String, packageName: String) {
         if (accessibility != null) accessibility.authorizedRoot(tool, packageName)
@@ -294,7 +319,11 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
             "phone_ui" -> setOf("maxNodes").also { range("maxNodes", 1, 500) }
             "phone_screenshot" -> setOf("maxDimension").also { range("maxDimension", 256, 1440) }
             "phone_open_app", "phone_back" -> setOf("packageName")
-            "phone_tap" -> setOf("packageName", "nodeId", "x", "y").also {
+            "phone_key" -> setOf("key", "packageName").also {
+                if (args.opt("key") !is String || args.getString("key") !in setOf("HOME", "BACK", "ENTER", "TAB")) throw ToolFailure("INVALID_ARGUMENT", text(R.string.err_argument_invalid, "key"))
+            }
+            "phone_tap" -> setOf("packageName", "nodeId", "x", "y", "durationMs").also {
+                range("durationMs", 50, 2000)
                 if (args.has("nodeId")) {
                     if (args.has("x") || args.has("y")) throw ToolFailure("INVALID_ARGUMENT", text(R.string.err_node_coordinate_conflict))
                 } else { range("x", 0, 16384, true); range("y", 0, 16384, true) }
@@ -308,7 +337,7 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
             else -> throw ToolFailure("UNKNOWN_TOOL", text(R.string.err_unknown_tool))
         }
         if (args.keys().asSequence().any { it !in keys }) throw ToolFailure("INVALID_ARGUMENT", text(R.string.err_unknown_parameter))
-        if ("packageName" in keys && (args.opt("packageName") !is String || !args.getString("packageName").matches(Regex("[a-zA-Z][\\w]*(\\.[\\w]+)+")) || args.getString("packageName").length > 255)) throw ToolFailure("INVALID_ARGUMENT", text(R.string.err_package_name_invalid))
+        if ("packageName" in keys && (tool != "phone_key" || args.has("packageName")) && (args.opt("packageName") !is String || !args.getString("packageName").matches(Regex("[a-zA-Z][\\w]*(\\.[\\w]+)+")) || args.getString("packageName").length > 255)) throw ToolFailure("INVALID_ARGUMENT", text(R.string.err_package_name_invalid))
         if (args.has("nodeId") && (args.opt("nodeId") !is String || args.getString("nodeId").length > 100)) throw ToolFailure("INVALID_ARGUMENT", text(R.string.err_node_id_invalid))
     }
 }

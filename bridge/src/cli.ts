@@ -4,7 +4,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { initConfig, loadConfig, loopback, type Config } from './config.js';
 import { createBridge } from './server.js';
 import { createMcpServer } from './mcp.js';
-import { failure, resultSchema } from './protocol.js';
+import { callBridge } from './client.js';
 
 async function main() {
   const { values, positionals } = parseArgs({ allowPositionals: true,
@@ -27,15 +27,7 @@ async function main() {
     return;
   }
   if (command === 'mcp') {
-    const server = createMcpServer(async (tool, args, signal) => {
-      try {
-        const response = await fetch(`${baseUrl}/api/call`, { method: 'POST',
-          headers: authHeaders(config), body: JSON.stringify({ tool, args }),
-          signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(config.requestTimeoutMs + 3000)]) : AbortSignal.timeout(config.requestTimeoutMs + 3000) });
-        if (!response.ok) return failure('BRIDGE_UNAVAILABLE', `Bridge returned HTTP ${response.status}`);
-        return resultSchema.parse(await response.json());
-      } catch { return failure('BRIDGE_UNAVAILABLE', 'Could not reach Bridge; do not automatically repeat an action with an unknown result', true); }
-    });
+    const server = createMcpServer((tool, args, signal) => callBridge(baseUrl, config, tool, args, signal));
     await server.connect(new StdioServerTransport());
     return;
   }

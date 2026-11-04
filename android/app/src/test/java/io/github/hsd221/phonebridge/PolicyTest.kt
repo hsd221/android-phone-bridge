@@ -42,6 +42,19 @@ class PolicyTest {
         denied("IDENTITY_MISMATCH") { gate.accept(UUID.randomUUID().toString(), "other", 1, 99000, 110000) }
         denied("IDENTITY_MISMATCH") { gate.accept(UUID.randomUUID().toString(), "phone", 2, 99000, 110000) }
     }
+    @Test fun navigationIsAnIndependentOperationAndCannotBypassPauses() {
+        denied("CAPABILITY_DENIED") { AccessPolicy().requireTool("phone_key") }
+        AccessPolicy(capabilities = setOf(Capability.OPERATE)).requireTool("phone_key")
+        denied("CAPABILITY_DENIED") {
+            AccessPolicy(tools = setOf("phone_back"), toolPermissionsConfigured = true).requireTool("phone_key")
+        }
+        denied("OPERATIONS_PAUSED") {
+            AccessPolicy(pausedOperations = true, tools = setOf("phone_key"), toolPermissionsConfigured = true).requireTool("phone_key")
+        }
+        denied("PAUSED") {
+            AccessPolicy(pausedAll = true, tools = setOf("phone_key"), toolPermissionsConfigured = true).requireTool("phone_key")
+        }
+    }
     @Test fun unlockRequiresOperationPermissionAndItsOwnLocalOptIn() {
         denied("CAPABILITY_DENIED") { AccessPolicy().requireTool("phone_unlock") }
         denied("CAPABILITY_DENIED") { AccessPolicy(capabilities = Capability.entries.toSet()).requireTool("phone_unlock") }

@@ -76,11 +76,11 @@ node dist/cli.js status --config bridge.config.json
 ## 第二步：构建与配置手机端应用
 
 ### 1. 获取 APK
-你可以直接从本仓库的 [GitHub Releases](https://github.com/hsd221/android-phone-bridge/releases) 下载预构建的测试安装包，或者自行编译：
+你可以直接从本仓库的 [GitHub Releases](https://github.com/hsd221/android-phone-bridge/releases) 下载 APK 和 `SHA256SUMS`。正式版提供 `phone-bridge-<版本>.apk`，用于调试与设备测试的 Debug 包可自行编译：
 
 **自行编译环境要求**：
 - JDK 17
-- Android SDK Platform 35 及 Build Tools 35.0.0（配置好环境变量 `ANDROID_HOME`）
+- Android SDK Platform 36 及 Build Tools 35.0.0（配置好环境变量 `ANDROID_HOME`）
 
 **编译命令**：
 ```sh
@@ -94,8 +94,10 @@ cd android
 - 主应用 APK：`android/app/build/outputs/apk/debug/app-debug.apk`
 - 独立测试应用 APK：`android/demo/build/outputs/apk/debug/demo-debug.apk`
 
+发布构建使用 `./gradlew :app:lintRelease :app:assembleRelease`。通过安全环境变量提供 `PHONE_BRIDGE_KEYSTORE`（Keystore 的绝对路径）、`PHONE_BRIDGE_STORE_PASSWORD`、`PHONE_BRIDGE_KEY_ALIAS`、`PHONE_BRIDGE_KEY_PASSWORD` 后，产物为 `android/app/build/outputs/apk/release/app-release.apk`。未配置签名时只生成未签名包。签名文件和密码不提交到仓库；升级已有安装须使用原证书，并递增 `versionCode`。Release 构建不启用 Android 调试标志。
+
 ### 2. 安装与初次配对
-1. 将 `app-debug.apk` 安装至手机（要求 Android 11 / API 30 及以上版本，无需 Root）。
+1. 将下载的正式 APK 或自行构建的 APK 安装至手机（要求 Android 11 / API 30 及以上版本，无需 Root）。
 2. 打开应用的“连接”页，输入 Bridge 服务的对外访问地址（例如 `https://phone-bridge.example.com` 或局域网调试地址）以及前述生成的一次性配对码，点击确认配对。
 3. 配对成功后，手机端会使用系统 Keystore 中的密钥加密身份凭据后保存在本机。只要网络连通，后续均会在后台自动重连，无需重复配对。
 
@@ -179,6 +181,14 @@ Bridge 支持通过两种标准方式接入任意 MCP 客户端。
 - 请确保填写的脚本与配置文件路径为绝对路径。
 - 在 Windows 环境下路径应形如 `C:/Users/YourName/android-phone-bridge/dist/cli.js`。
 - stdio 模式属于轻量本地代理，底层的 Bridge 服务进程本身必须已经处于运行状态。
+
+### 升级与版本核对
+
+更新源码后执行 `npm ci`、`npm run build`，再重启常驻 Bridge 服务；只重启 stdio 子进程不会替换旧的 `serve` 进程。systemd 部署可使用 `sudo systemctl restart phone-bridge`。重启会结束在途请求，操作结果未知时先观察手机，不要自动重放。
+
+通过 `phone_status.bridge` 或 `node dist/cli.js status` 返回的 `bridge` 核对运行版本、协议与 `supportedTools`。手机离线时仍可查看服务端信息；手机在线后再结合 `appVersion` 和逐工具授权 `tools` 确认设备支持。升级后的 `phone_key` 开关默认关闭，需要在手机“访问”页单独开启。
+
+`TOOL_NOT_SUPPORTED_BY_BRIDGE` 表示当前常驻服务尚未注册工具，通常需要重新构建并重启；`BRIDGE_AUTH_FAILED` 与 `BRIDGE_ACCESS_DENIED` 分别表示凭证及访问检查被拒绝，和网络不可达分开报告。
 
 ---
 

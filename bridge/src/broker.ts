@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import WebSocket from 'ws';
 import { z } from 'zod';
-import { failure, isOperation, resultSchema, toolInputs, type ToolName, type ToolResult } from './protocol.js';
+import { bridgeInfo, failure, isOperation, resultSchema, toolInputs, type ToolName, type ToolResult } from './protocol.js';
 
 type Pending = { socket: WebSocket; tool: ToolName; resolve: (result: ToolResult) => void; timer: NodeJS.Timeout; cleanup: () => void };
 export class PhoneBroker {
@@ -44,7 +44,9 @@ export class PhoneBroker {
     const parsed = toolInputs[tool].safeParse(args);
     if (!parsed.success) return failure('INVALID_ARGUMENT', parsed.error.issues.map(i => i.message).join('; '));
     const socket = this.socket;
-    if (!this.online || !socket || !this.deviceId) return failure('PHONE_OFFLINE', 'The paired phone is not connected');
+    if (!this.online || !socket || !this.deviceId) return tool === 'phone_status'
+      ? { ok: true, data: { connected: false, bridge: bridgeInfo() } }
+      : failure('PHONE_OFFLINE', 'The paired phone is not connected');
     if (signal?.aborted) return failure('CANCELLED', 'Harness cancelled the request');
     if (this.pending.size >= 8) return failure('BUSY', 'Phone request queue is full');
     const id = randomUUID();
@@ -79,6 +81,7 @@ export class PhoneBroker {
     clearTimeout(pending.timer);
     pending.cleanup();
     this.pending.delete(id);
-    pending.resolve(result);
+    pending.resolve(pending.tool === 'phone_status' && result.ok && result.data !== null && typeof result.data === 'object'
+      ? { ok: true, data: { ...result.data, bridge: bridgeInfo() } } : result);
   }
 }

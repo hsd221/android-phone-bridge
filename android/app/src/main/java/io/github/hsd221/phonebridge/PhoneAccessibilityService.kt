@@ -9,6 +9,7 @@ import android.graphics.Rect
 import android.os.Bundle
 import android.util.Base64
 import android.view.Display
+import android.view.View
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -52,7 +53,7 @@ class PhoneAccessibilityService : AccessibilityService() {
         val policy = prefs.policy()
         policy.requireTool(tool)
         if (getSystemService(KeyguardManager::class.java).isKeyguardLocked) throw ToolFailure("DEVICE_LOCKED", text(R.string.err_device_locked))
-        val operation = tool in setOf("phone_tap", "phone_swipe", "phone_input", "phone_back", "phone_open_app")
+        val operation = tool in BridgeTools.operations
         val root = rootInActiveWindow ?: throw ToolFailure("UI_UNAVAILABLE", text(R.string.err_ui_unavailable))
         val target = root.packageName?.toString() ?: throw ToolFailure("UI_UNAVAILABLE", text(R.string.err_foreground_app_unknown))
         if (expectedPackage != null && expectedPackage != target) throw ToolFailure("APP_CHANGED", text(R.string.err_app_mismatch))
@@ -79,6 +80,8 @@ class PhoneAccessibilityService : AccessibilityService() {
         while (queue.isNotEmpty() && nodes.length() < maxNodes && visited < 2000) {
             val (node, path) = queue.removeFirst()
             visited++
+            // Hidden layout containers can still own visible descendants.
+            for (index in 0 until node.childCount.coerceAtMost(500)) node.getChild(index)?.let { queue.add(it to (path + index)) }
             if (!node.isVisibleToUser) continue
             val owner = node.packageName?.toString() ?: throw ToolFailure("UI_UNAVAILABLE", text(R.string.err_control_owner_unknown))
             authorizePackage(owner, false, text(R.string.err_control_context, root.packageName ?: ""))
@@ -89,10 +92,9 @@ class PhoneAccessibilityService : AccessibilityService() {
                 .put("className", node.className?.toString()).put("viewId", node.viewIdResourceName)
                 .put("text", if (node.isPassword) "[redacted]" else node.text?.take(2000)?.toString())
                 .put("description", if (node.isPassword) "[redacted]" else node.contentDescription?.take(2000)?.toString())
-                .put("password", node.isPassword).put("clickable", node.isClickable).put("editable", node.isEditable)
+                .put("password", node.isPassword).put("clickable", node.isClickable).put("longClickable", node.isLongClickable).put("editable", node.isEditable)
                 .put("enabled", node.isEnabled).put("focused", node.isFocused).put("scrollable", node.isScrollable)
                 .put("bounds", JSONArray(listOf(bounds.left, bounds.top, bounds.right, bounds.bottom))))
-            for (index in 0 until node.childCount.coerceAtMost(500)) node.getChild(index)?.let { queue.add(it to (path + index)) }
         }
         if (epoch != uiEpoch) throw ToolFailure("UI_CHANGED", text(R.string.err_ui_changed))
         snapshotEpoch = epoch
@@ -113,18 +115,21 @@ class PhoneAccessibilityService : AccessibilityService() {
     suspend fun tap(args: JSONObject, ensure: () -> Unit): JSONObject {
         ensure()
         val root = authorizedRoot("phone_tap", args.getString("packageName"))
+        val duration = args.optLong("durationMs", 50)
         if (args.has("nodeId")) {
             val node = resolveNode(root, args.getString("nodeId"))
-            if (!node.isClickable) throw ToolFailure("ACTION_UNAVAILABLE", text(R.string.err_control_not_clickable))
+            val longPress = duration >= 500
+            if (longPress && !node.isLongClickable) throw ToolFailure("ACTION_UNAVAILABLE", text(R.string.err_control_not_long_clickable))
+            if (!longPress && !node.isClickable) throw ToolFailure("ACTION_UNAVAILABLE", text(R.string.err_control_not_clickable))
             ensure()
-            val accepted = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            val accepted = node.performAction(if (longPress) AccessibilityNodeInfo.ACTION_LONG_CLICK else AccessibilityNodeInfo.ACTION_CLICK)
             invalidate()
-            if (!accepted) throw ToolFailure("ACTION_REJECTED", text(R.string.err_click_rejected))
+            if (!accepted) throw ToolFailure("ACTION_REJECTED", text(if (longPress) R.string.err_long_click_rejected else R.string.err_click_rejected))
             return JSONObject().put("accepted", true)
         }
         val x = args.getInt("x"); val y = args.getInt("y")
         checkPoint(root, x, y)
-        return gesture(Path().apply { moveTo(x.toFloat(), y.toFloat()) }, 80, ensure)
+        return gesture(Path().apply { moveTo(x.toFloat(), y.toFloat()) }, duration, ensure)
     }
     suspend fun swipe(args: JSONObject, ensure: () -> Unit): JSONObject {
         ensure()
@@ -166,6 +171,29 @@ class PhoneAccessibilityService : AccessibilityService() {
         if (!accepted) throw ToolFailure("ACTION_REJECTED", text(R.string.err_back_rejected))
         return JSONObject().put("accepted", true)
     }
+    fun key(args: JSONObject, ensure: () -> Unit): JSONObject {
+        ensure()
+        val root = authorizedRoot("phone_key", args.optString("packageName").takeIf { args.has("packageName") })
+        val key = args.getString("key")
+        val focus = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        val target = when (key) {
+            "ENTER" -> focus?.takeIf { it.isEditable && !it.isPassword && it.isVisibleToUser && it.isEnabled && it.packageName == root.packageName }
+            "TAB" -> (focus ?: root).focusSearch(View.FOCUS_FORWARD)?.takeIf { it.isVisibleToUser && it.isEnabled && it.packageName == root.packageName }
+            else -> null
+        }
+        if (key in setOf("ENTER", "TAB") && target == null) throw ToolFailure("ACTION_UNAVAILABLE", text(R.string.err_key_unavailable, key))
+        ensure()
+        val accepted = when (key) {
+            "HOME" -> performGlobalAction(GLOBAL_ACTION_HOME)
+            "BACK" -> performGlobalAction(GLOBAL_ACTION_BACK)
+            "ENTER" -> target!!.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
+            "TAB" -> target!!.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+            else -> throw ToolFailure("INVALID_ARGUMENT", text(R.string.err_argument_invalid, "key"))
+        }
+        invalidate()
+        if (!accepted) throw ToolFailure("ACTION_REJECTED", text(R.string.err_key_rejected, key))
+        return JSONObject().put("accepted", true).put("key", key).put("path", "accessibility")
+    }
     suspend fun screenshot(maxDimension: Int, ensure: () -> Unit): JSONObject {
         ensure(); authorizedRoot("phone_screenshot")
         val epoch = windowEpoch
@@ -198,6 +226,7 @@ class PhoneAccessibilityService : AccessibilityService() {
                         ensure()
                         continuation.resume(JSONObject().put("mimeType", "image/png").put("width", bitmap!!.width).put("height", bitmap!!.height)
                             .put("displayWidth", displayWidth).put("displayHeight", displayHeight)
+                            .put("scaleX", bitmap!!.width.toDouble() / displayWidth).put("scaleY", bitmap!!.height.toDouble() / displayHeight)
                             .put("capturedAt", System.currentTimeMillis()).put("base64", Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)))
                     } catch (error: Exception) { if (continuation.isActive) continuation.resumeWithException(error) }
                     finally { bitmap?.recycle(); buffer.close() }

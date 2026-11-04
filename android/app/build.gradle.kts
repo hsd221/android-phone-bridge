@@ -10,11 +10,23 @@ android {
         applicationId = "io.github.hsd221.phonebridge"
         minSdk = 30
         targetSdk = 35
-        versionCode = 12
-        versionName = "0.3.0-pre.9"
+        versionCode = 13
+        versionName = "0.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { aidl = true; buildConfig = true }
+    val releaseKeystore = providers.environmentVariable("PHONE_BRIDGE_KEYSTORE")
+    if (releaseKeystore.isPresent) {
+        signingConfigs {
+            create("distribution") {
+                storeFile = file(releaseKeystore.get())
+                storePassword = providers.environmentVariable("PHONE_BRIDGE_STORE_PASSWORD").get()
+                keyAlias = providers.environmentVariable("PHONE_BRIDGE_KEY_ALIAS").get()
+                keyPassword = providers.environmentVariable("PHONE_BRIDGE_KEY_PASSWORD").get()
+            }
+        }
+        buildTypes.getByName("release") { signingConfig = signingConfigs.getByName("distribution") }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

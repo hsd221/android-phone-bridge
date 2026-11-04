@@ -75,6 +75,70 @@ class ShizukuUnlockTest {
         eventually("Test harness did not grant the Shizuku runtime permission") { support.status().optBoolean("available") }
         assertTrue("Shizuku is not authorized as shell UID 2000", support.status().optBoolean("available"))
     }
+    private suspend fun verifyAdbControls() {
+        val fixturePackage = instrumentation.context.packageName
+        listOf(fixturePackage, "com.android.systemui", "com.android.launcher3", "com.android.inputmethod.latin").forEach {
+            prefs.setApp(it, AppAccess(read = true, operate = true))
+        }
+        prefs.setTools(true)
+        shell("am start -n $fixturePackage/${DesignControlsFixture::class.java.name}")
+        fun nodes(): List<JSONObject> {
+            val data = PhoneAccessibilityService.instance!!.readUi(300)
+            assertEquals(fixturePackage, data.getString("packageName"))
+            val values = data.getJSONArray("nodes")
+            return (0 until values.length()).map(values::getJSONObject)
+        }
+        suspend fun input(action: (IAdbTools) -> Int) {
+            val result = withContext(Dispatchers.Main) {
+                ShizukuSupport(context).input({ remote -> assertEquals(2000, remote.uid()); action(remote) }) {}
+            }
+            assertNotNull("Real Shizuku input unexpectedly fell back", result)
+            assertEquals("adb", result!!.getString("path"))
+            delay(150)
+        }
+        suspend fun point(description: String): Pair<Int, Int> {
+            var target: JSONObject? = null
+            eventually("ADB fixture control was unavailable: $description") {
+                target = nodes().firstOrNull { it.optString("text") == description || it.optString("description") == description }
+                target != null
+            }
+            val bounds = target!!.getJSONArray("bounds")
+            return (bounds.getInt(0) + bounds.getInt(2)) / 2 to (bounds.getInt(1) + bounds.getInt(3)) / 2
+        }
+        fun status() = context.contentResolver.query(android.net.Uri.parse("content://io.github.hsd221.phonebridge.test.design-state/state"), null, null, null, null)
+            ?.use { if (it.moveToFirst()) it.getString(0) else null }
+        eventually("ADB fixture did not become active") {
+            PhoneAccessibilityService.instance?.rootInActiveWindow?.packageName?.toString() == fixturePackage
+        }
+        input { remote ->
+            assertEquals(-3, remote.key("POWER"))
+            assertEquals(-3, remote.key("BACK; input keyevent 26"))
+            0
+        }
+        assertTrue("Rejected keys changed screen power", power.isInteractive)
+        val button = point("fixture coordinate control")
+        input { it.swipe(button.first, button.second, button.first, button.second, 700) }
+        eventually("ADB same-point swipe did not trigger a long click") { status() == "coordinate long pressed" }
+        assertNotEquals("Long press also dispatched an ordinary click", "coordinate clicked", status())
+        input { it.tap(button.first, button.second) }
+        eventually("ADB ordinary tap did not click") { status() == "coordinate clicked" }
+        val first = point("fixture first input")
+        input { it.tap(first.first, first.second) }
+        input { it.key("ENTER") }
+        eventually("ADB ENTER did not submit the fixture editor") { status() == "editor submitted" }
+        input { it.tap(first.first, first.second) }
+        input { it.key("TAB") }
+        eventually("ADB TAB did not move focus forward") {
+            nodes().any { it.optString("description") == "fixture second input" && it.optBoolean("focused") }
+        }
+        input { it.key("BACK") }
+        input { it.key("HOME") }
+        eventually("ADB HOME did not activate the launcher") {
+            PhoneAccessibilityService.instance?.rootInActiveWindow?.packageName?.toString() == "com.android.launcher3"
+        }
+        shell("am start -n $fixturePackage/${DesignControlsFixture::class.java.name} --ez close true")
+        note("PASS: real shell UID 2000 whitelist, HOME/BACK/ENTER/TAB, and same-point long press.")
+    }
     private fun setSystemCredential(credential: UnlockCredential) {
         val command = when (credential.kind) {
             UnlockKind.PIN -> "set-pin"
@@ -188,6 +252,7 @@ class ShizukuUnlockTest {
             prefs.unlockEnabled = true
             prefs.shizukuEnabled = true
             authorizeShizuku()
+            verifyAdbControls()
 
             for (credential in listOf(pin, password, pattern)) {
                 setSystemCredential(credential)

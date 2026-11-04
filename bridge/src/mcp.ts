@@ -1,9 +1,9 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { toolDescriptions, toolInputs, type ToolName, type ToolResult, isOperation } from './protocol.js';
+import { BRIDGE_VERSION, toolDescriptions, toolInputs, type ToolName, type ToolResult, isOperation } from './protocol.js';
 
 export type Caller = (tool: ToolName, args: unknown, signal?: AbortSignal) => Promise<ToolResult>;
 export function createMcpServer(call: Caller) {
-  const server = new McpServer({ name: 'android-phone-bridge', version: '0.1.0' });
+  const server = new McpServer({ name: 'android-phone-bridge', version: BRIDGE_VERSION });
   for (const tool of Object.keys(toolInputs) as ToolName[]) {
     server.registerTool(tool, {
       description: toolDescriptions[tool], inputSchema: toolInputs[tool],

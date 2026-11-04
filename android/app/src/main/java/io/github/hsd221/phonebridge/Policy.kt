@@ -8,9 +8,9 @@ object BridgeTools {
     val all = listOf(
         "phone_device_info", "phone_apps", "phone_notifications", "phone_clipboard", "phone_set_clipboard", "phone_media",
         "phone_location", "phone_ui", "phone_screenshot", "phone_open_app",
-        "phone_tap", "phone_swipe", "phone_input", "phone_back", "phone_unlock",
+        "phone_tap", "phone_swipe", "phone_input", "phone_back", "phone_key", "phone_unlock",
     )
-    val operations = setOf("phone_unlock", "phone_open_app", "phone_tap", "phone_swipe", "phone_input", "phone_back", "phone_set_clipboard")
+    val operations = setOf("phone_unlock", "phone_open_app", "phone_tap", "phone_swipe", "phone_input", "phone_back", "phone_key", "phone_set_clipboard")
 
     fun capability(tool: String) = when (tool) {
         "phone_device_info" -> Capability.DEVICE
@@ -21,7 +21,7 @@ object BridgeTools {
         "phone_location" -> Capability.LOCATION
         "phone_ui" -> Capability.UI
         "phone_screenshot" -> Capability.SCREENSHOT
-        "phone_unlock", "phone_open_app", "phone_tap", "phone_swipe", "phone_input", "phone_back" -> Capability.OPERATE
+        "phone_unlock", "phone_open_app", "phone_tap", "phone_swipe", "phone_input", "phone_back", "phone_key" -> Capability.OPERATE
         else -> null
     }
 

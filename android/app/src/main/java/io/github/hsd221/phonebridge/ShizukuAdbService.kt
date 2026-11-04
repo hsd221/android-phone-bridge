@@ -25,6 +25,17 @@ class ShizukuAdbService : IAdbTools.Stub() {
 
     override fun back(): Int = runInput("keyevent", "4")
 
+    override fun key(key: String): Int {
+        val code = when (key) {
+            "HOME" -> "3"
+            "BACK" -> "4"
+            "ENTER" -> "66"
+            "TAB" -> "61"
+            else -> return -3
+        }
+        return runInput("keyevent", code)
+    }
+
     private fun runInput(vararg args: String): Int {
         if (uid() != 2000) return -2
         val process = try {
