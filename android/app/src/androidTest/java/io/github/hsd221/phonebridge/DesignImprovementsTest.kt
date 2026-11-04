@@ -28,6 +28,9 @@ class DesignImprovementsTest {
     private val arguments = InstrumentationRegistry.getArguments()
     private val prefs = BridgePrefs(context)
     private val fixturePackage = instrumentation.context.packageName
+    private val homePackage get() = context.packageManager.resolveActivity(
+        Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+        ?.activityInfo?.packageName ?: error("Dedicated emulator has no resolvable HOME activity")
     private var requestId = 0
     private fun note(value: String) = instrumentation.sendStatus(0, android.os.Bundle().apply { putString("stream", "$value\n") })
     private fun shell(command: String) = instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
@@ -85,6 +88,15 @@ class DesignImprovementsTest {
             }
         }
     }
+    private fun tabReady() {
+        eventually("Fixture input focus and forward target did not settle") {
+            val root = PhoneAccessibilityService.instance!!.rootInActiveWindow ?: return@eventually false
+            val focus = root.findFocus(android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT) ?: return@eventually false
+            if (focus.contentDescription?.toString() != "fixture first input") return@eventually false
+            val next = focus.focusSearch(android.view.View.FOCUS_FORWARD) ?: return@eventually false
+            next.contentDescription?.toString() == "fixture second input" && next.isVisibleToUser && next.isEnabled
+        }
+    }
     private fun ui(expected: String? = null): JSONObject {
         var last = JSONObject()
         try {
@@ -133,9 +145,10 @@ class DesignImprovementsTest {
             prefs.setTools(true)
             prefs.setFlag("pausedAll", false); prefs.setFlag("pausedOperations", false)
             prefs.shizukuEnabled = false
-            for (name in listOf(fixturePackage, "com.android.systemui", "com.android.launcher3", "com.android.inputmethod.latin")) {
+            for (name in listOf(fixturePackage, "com.android.systemui")) {
                 prefs.setApp(name, AppAccess(read = true, operate = true))
             }
+            prefs.setApp(homePackage, AppAccess(read = true, operate = true))
             android.content.ComponentName.unflattenFromString(android.provider.Settings.Secure.getString(
                 context.contentResolver, android.provider.Settings.Secure.DEFAULT_INPUT_METHOD).orEmpty())?.packageName?.let {
                 prefs.setApp(it, AppAccess(read = true, operate = true))
@@ -179,6 +192,7 @@ class DesignImprovementsTest {
             assertEquals("accessibility", ok("phone_key", JSONObject().put("key", "ENTER")).getString("path"))
             fixtureStatus("editor submitted")
             tapNode("description", "fixture first input")
+            tabReady()
             ok("phone_key", JSONObject().put("key", "TAB"))
             eventually("TAB did not move input focus forward") {
                 nodes(ui()).any { it.optString("description") == "fixture second input" && it.optBoolean("focused") }
@@ -194,7 +208,7 @@ class DesignImprovementsTest {
             navigationReady(waitForImeDismissal = true) // Observe IME dismissal before sending a distinct global action.
             ok("phone_key", JSONObject().put("key", "HOME"))
             eventually("HOME did not leave the fixture") {
-                PhoneAccessibilityService.instance?.rootInActiveWindow?.packageName?.toString() == "com.android.launcher3"
+                PhoneAccessibilityService.instance?.rootInActiveWindow?.packageName?.toString() == homePackage
             }
             openFixture()
             shell("am start -a android.settings.SETTINGS")

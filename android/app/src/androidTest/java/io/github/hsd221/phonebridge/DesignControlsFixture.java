@@ -62,14 +62,18 @@ public class DesignControlsFixture extends Activity {
         button.setOnLongClickListener(view -> { updateStatus(status, "coordinate long pressed"); return true; });
         body.addView(button);
         EditText first = new EditText(this);
+        first.setId(0x00f00001);
         first.setContentDescription("fixture first input");
         first.setSingleLine();
         first.setImeOptions(EditorInfo.IME_ACTION_DONE);
         first.setOnEditorActionListener((view, action, event) -> { updateStatus(status, "editor submitted"); return true; });
         body.addView(first);
         EditText second = new EditText(this);
+        second.setId(0x00f00002);
         second.setContentDescription("fixture second input");
         second.setSingleLine();
+        first.setNextFocusForwardId(second.getId());
+        second.setNextFocusForwardId(first.getId());
         body.addView(second);
         setContentView(body);
     }

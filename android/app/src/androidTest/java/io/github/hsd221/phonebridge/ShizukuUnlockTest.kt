@@ -77,9 +77,14 @@ class ShizukuUnlockTest {
     }
     private suspend fun verifyAdbControls() {
         val fixturePackage = instrumentation.context.packageName
-        listOf(fixturePackage, "com.android.systemui", "com.android.launcher3", "com.android.inputmethod.latin").forEach {
+        listOf(fixturePackage, "com.android.systemui").forEach {
             prefs.setApp(it, AppAccess(read = true, operate = true))
         }
+        val homePackage = context.packageManager.resolveActivity(
+            android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME),
+            android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
+            ?: error("Dedicated emulator has no resolvable HOME activity")
+        prefs.setApp(homePackage, AppAccess(read = true, operate = true))
         android.content.ComponentName.unflattenFromString(android.provider.Settings.Secure.getString(
             context.contentResolver, android.provider.Settings.Secure.DEFAULT_INPUT_METHOD).orEmpty())?.packageName?.let {
             prefs.setApp(it, AppAccess(read = true, operate = true))
@@ -131,6 +136,11 @@ class ShizukuUnlockTest {
         input { it.key("ENTER") }
         eventually("ADB ENTER did not submit the fixture editor") { status() == "editor submitted" }
         input { it.tap(first.first, first.second) }
+        eventually("ADB fixture did not focus its first input before TAB") {
+            val focus = PhoneAccessibilityService.instance!!.rootInActiveWindow
+                ?.findFocus(android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT)
+            focus?.contentDescription?.toString() == "fixture first input"
+        }
         input { it.key("TAB") }
         eventually("ADB TAB did not move focus forward") {
             nodes().any { it.optString("description") == "fixture second input" && it.optBoolean("focused") }
@@ -150,7 +160,7 @@ class ShizukuUnlockTest {
         }
         input { it.key("HOME") }
         eventually("ADB HOME did not activate the launcher") {
-            PhoneAccessibilityService.instance?.rootInActiveWindow?.packageName?.toString() == "com.android.launcher3"
+            PhoneAccessibilityService.instance?.rootInActiveWindow?.packageName?.toString() == homePackage
         }
         shell("am start -n $fixturePackage/${DesignControlsFixture::class.java.name} --ez close true")
         note("PASS: real shell UID 2000 whitelist, HOME/BACK/ENTER/TAB, and same-point long press.")
