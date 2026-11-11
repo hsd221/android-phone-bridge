@@ -1,6 +1,6 @@
 # 测试与设备验收记录
 
-> **记录时间**：2026-10-27 至 2026-10-31
+> **记录时间**：2026-10-27 至 2026-11-12
 > **注意**：本地模拟器或 CI 测试全绿代表代码逻辑与协议闭环符合预期，但不能直接推断为所有实体手机（尤其是不同厂商深度定制的 Android ROM）均已完美兼容。实机兼容性需单独验证并记录。
 
 ---
@@ -25,6 +25,22 @@ cd android
 ```
 
 正式构建还需执行 `./gradlew :app:lintRelease :app:assembleRelease`，签名环境变量见部署文档。交付前核对 APK 的版本、证书、非调试标志与附件 SHA-256；测试夹具仅编入独立测试 APK。
+
+### 单文件程序与容器验证
+
+使用 Node.js 22 构建当前系统和 CPU 架构的独立可执行程序，再运行隔离冒烟测试：
+
+```sh
+npm run package:binary
+node scripts/smoke-binary.mjs
+
+docker build -t phone-bridge:local .
+node scripts/smoke-container.mjs phone-bridge:local
+```
+
+单文件冒烟测试把程序复制到没有 `node_modules` 的临时目录，并从子进程 `PATH` 中移除 Node.js，验证初始化防覆盖、启动、配对码续期与重放拒绝、设备凭据散列、重启保留身份、stdio MCP 和撤销。容器测试使用独立名称、临时卷及随机宿主端口，验证非 Root、只读根文件系统、健康检查、配对与删除重建容器后的配置和身份持久化；结束时清理测试容器及卷。它们不使用现有实例的配置或配对身份。
+
+常规 CI 在 Linux x64 与 Windows x64 运行单文件测试，在 Linux x64 运行容器测试。手动 `distribution.yml` 工作流另构建 Linux arm64 程序和 amd64/arm64 OCI 镜像包，通过 Actions artifacts 保存程序、镜像和 `SHA256SUMS`，不会推送镜像仓库或创建 GitHub Release。每个二进制由对应架构 Runner 执行冒烟测试，构建成功不能替代运行验证。
 
 ### 2. 测试覆盖内容
 - **Bridge 服务端测试**：
@@ -203,3 +219,26 @@ adb -s emulator-5554 shell am instrument -w -r \
 - `NotificationPermissionTest` 在启动插桩前撤销通知权限，核对胶囊开关不可用且不勾选。撤销在外部完成，避免运行中的测试进程被系统终止而掩盖结果。
 
 上述插桩已加入 `npm run test:android -- emulator-5554`。现有中文 UI 用例在重置沙箱后显式设为 `zh-CN`，不依赖镜像的默认语言。CI 保留 API 35 的完整闭环，并增加 API 36、36.1 的常规闭环；早期 API 36 镜像未开放实时更新时，应验证禁用和普通通知降级，不能将仅请求成功等同于系统已展示胶囊。实体手机和厂商 ROM 的最终外观仍需单独验收。
+
+## 十四、部署分发与扫码配对验证
+
+2026-11-12 本地验证通过：Bridge 类型检查与 18 项测试、Android 64 项 JVM 测试、Debug/Release Lint 与 APK 构建、Linux x64 单文件隔离冒烟、Docker 隔离冒烟、Compose 启动及健康检查，以及两份 GitHub Actions 工作流的 actionlint 检查。
+
+API 35 专用模拟器通过既有手动配对与旋转恢复回归，以及新增二维码确认、过期、HTTP 独立授权、相机后台释放、返回与重建后重新打开、取消和系统相机授权拒绝用例。`PairingQrUiTest` 的表单与 Camera2 生命周期用例已加入常规模拟器脚本；拒绝授权和图像输入用例使用独立参数，避免更改正在运行的插桩进程权限。
+
+光学专项使用 Android Emulator 37.2.12 的 `-camera-back imagefile:<绝对路径>`，验证了终端 ANSI 半块字符重建 PNG → Camera2/YUV → ZXing → 地址确认 → 填入表单的完整路径。生成合成输入的命令为：
+
+```sh
+npx tsx scripts/generate-qr-camera-fixture.ts /tmp/phone-bridge-qr-camera.png
+```
+
+脚本仅编码固定虚构服务地址和配对码，有效期一小时，不读取实际 Bridge 配置或访问服务。默认位置适配本轮模拟器的图像旋转与裁切；其他镜头布局可用 `--center-x`、`--center-y` 和 `--scale` 调整，需确保完整二维码及留白进入画面。把该 PNG 作为专用模拟器的后置相机输入，安装 Debug 及测试 APK 后运行：
+
+```sh
+adb -s emulator-5554 shell am instrument -w -r \
+  -e class 'io.github.hsd221.phonebridge.PairingQrUiTest#cameraImageQrReturnsToTheSameConfirmationFlow' \
+  -e pairingQrUiTest true -e pairingQrImageTest true \
+  io.github.hsd221.phonebridge.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+此专项验证使用模拟器合成画面，尚未验证实体手机镜头与厂商 ROM。Windows x64、Linux arm64 和远端 CI 尚未在本轮执行。候选未签名 Release APK 为 7,221,076 字节，相对先前已发布的签名 APK 增加约 0.45 MiB；签名方式不同会产生少量体积差异，手机安装后占用未单独测量。

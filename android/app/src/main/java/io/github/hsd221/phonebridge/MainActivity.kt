@@ -40,6 +40,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class MainActivity : Activity() {
+    private companion object { const val SCAN_PAIRING = 23 }
     private lateinit var prefs: BridgePrefs
     private lateinit var ui: BridgeUi
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -65,6 +66,8 @@ class MainActivity : Activity() {
     private var code: Field? = null
     private var pairingError: TextView? = null
     private var pairButton: Button? = null
+    private var scanButton: Button? = null
+    private var pairingQrDialog: AlertDialog? = null
     private var httpToggle: ToggleRow? = null
     private var draftAddress = ""
     private var allowHttp = false
@@ -113,6 +116,7 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         pairingRequest.changed = null; updateCheckRequest.changed = null
         updateDialog?.setOnDismissListener(null); updateDialog?.dismiss(); updateDialog = null; updateDialogTag = null
+        pairingQrDialog?.dismiss(); pairingQrDialog = null
         if (!isChangingConfigurations) updateCheckRequest.close()
         scope.cancel(); super.onDestroy()
     }
@@ -125,7 +129,7 @@ class MainActivity : Activity() {
     private fun render() {
         draftAddress = address?.input?.text?.toString() ?: draftAddress
         permissionViews.clear(); toolRows.clear(); legacyToolAliases.clear(); pages.clear(); navigation.clear()
-        address = null; code = null; pairingError = null; pairButton = null; httpToggle = null
+        address = null; code = null; pairingError = null; pairButton = null; scanButton = null; httpToggle = null
         pairedAtRender = prefs.identity != null
         val root = FrameLayout(this)
         val stage = WidthBoundFrame(this)
@@ -393,6 +397,12 @@ class MainActivity : Activity() {
     }
     private fun pairingCard(parent: LinearLayout) {
         ui.space(parent, 4)
+        scanButton = ui.addButton(parent, getString(R.string.scan_pairing), ButtonKind.SECONDARY, R.id.pair_scan) {
+            if (!pairing && prefs.identity == null && prefs.pendingRevocation == null) {
+                @Suppress("DEPRECATION")
+                startActivityForResult(Intent(this, QrScannerActivity::class.java), SCAN_PAIRING)
+            }
+        }
         address = ui.field(getString(R.string.bridge_address), getString(R.string.bridge_url_hint), R.id.pair_address).also {
             it.input.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             it.input.imeOptions = EditorInfo.IME_ACTION_NEXT; it.input.setText(draftAddress)
@@ -436,6 +446,36 @@ class MainActivity : Activity() {
         address?.error(addressError); code?.error(codeError)
         return addressError == null && codeError == null
     }
+    @Deprecated("Platform result callback is used with the existing platform Activity base")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == SCAN_PAIRING && resultCode == RESULT_OK) {
+            data?.getStringExtra(QrScannerActivity.RESULT_QR)?.let(::consumePairingQr)
+        }
+    }
+    private fun consumePairingQr(raw: String) {
+        if (pairing || prefs.identity != null || prefs.pendingRevocation != null) return
+        val payload = runCatching { PairingPayload.parse(raw) }.getOrElse {
+            showPairingError(getString(R.string.scan_pairing_invalid)); return
+        }
+        pairingQrDialog?.dismiss()
+        val detail = getString(R.string.scan_pairing_confirm_detail, payload.url) +
+            if (Uri.parse(payload.url).scheme == "http") "\n\n${getString(R.string.scan_pairing_http)}" else ""
+        val dialog = AlertDialog.Builder(this).setTitle(R.string.scan_pairing_confirm)
+            .setMessage(detail).setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.scan_pairing_use) { _, _ ->
+                if (payload.expiresAt <= System.currentTimeMillis() || pairing || prefs.identity != null || prefs.pendingRevocation != null) {
+                    showPairingError(getString(R.string.scan_pairing_invalid))
+                } else {
+                    address?.input?.setText(payload.url); code?.input?.setText(payload.code)
+                    // The existing Pair button and HTTP consent remain the only path to connect.
+                    pairingError?.visibility = View.GONE
+                }
+            }.create()
+        pairingQrDialog = dialog
+        dialog.setOnDismissListener { if (pairingQrDialog === dialog) pairingQrDialog = null }
+        ui.showDialog(dialog)
+    }
     private fun startPairing() {
         if (pairing) return
         pairingAttempted = true
@@ -474,6 +514,7 @@ class MainActivity : Activity() {
             text = when { busy -> getString(R.string.pairing); pending -> getString(R.string.pending_revocation); else -> getString(R.string.pair_connect) }
         }
         address?.input?.isEnabled = !busy; code?.input?.isEnabled = !busy; httpToggle?.toggle?.isEnabled = !busy
+        scanButton?.isEnabled = !busy && prefs.pendingRevocation == null
     }
     private fun showPairingError(value: String) { pairingError?.apply { text = value; visibility = View.VISIBLE } }
     private fun updateStatus() {
@@ -493,6 +534,7 @@ class MainActivity : Activity() {
             else -> getString(R.string.reconnecting_detail)
         }
         if (!pairing) pairButton?.apply { isEnabled = !pending; text = if (pending) getString(R.string.pending_revocation) else getString(R.string.pair_connect) }
+        scanButton?.isEnabled = !pairing && !pending
         val policy = prefs.policy()
         accessState.text = when { policy.pausedAll -> getString(R.string.pause_all_status); policy.pausedOperations -> getString(R.string.paused_operations_access_status); identity == null -> getString(R.string.not_paused_unpaired); else -> getString(R.string.access_open_by_policy) }
         accessState.setTextColor(if (policy.pausedAll || policy.pausedOperations) ui.warning else ui.accent)

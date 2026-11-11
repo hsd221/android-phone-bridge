@@ -49,6 +49,11 @@ try {
     '-e', 'permissionUiTest', 'true', 'io.github.hsd221.phonebridge.test/androidx.test.runner.AndroidJUnitRunner');
   process.stdout.write(frontendUi);
   if (!frontendUi.includes('OK (7 tests)') || frontendUi.includes('FAILURES')) throw new Error('Frontend interaction tests failed');
+  const pairingQrUi = await adb('shell', 'am', 'instrument', '-w', '-r', '-e', 'class', 'io.github.hsd221.phonebridge.PairingQrUiTest',
+    '-e', 'pairingQrUiTest', 'true', '-e', 'pairingQrCameraTest', 'true',
+    'io.github.hsd221.phonebridge.test/androidx.test.runner.AndroidJUnitRunner');
+  process.stdout.write(pairingQrUi);
+  if (!pairingQrUi.includes('OK (5 tests)') || pairingQrUi.includes('FAILURES')) throw new Error('Pairing QR tests failed');
   const updateUi = await adb('shell', 'am', 'instrument', '-w', '-r', '-e', 'class', 'io.github.hsd221.phonebridge.AppUpdateUiTest',
     '-e', 'permissionUiTest', 'true', 'io.github.hsd221.phonebridge.test/androidx.test.runner.AndroidJUnitRunner');
   process.stdout.write(updateUi);

@@ -47,6 +47,7 @@ Anthropic 的 Computer Use 让我们看到了大模型直接与操作系统图�
   - 提供应用搜索、批量多选授权与一键全开配置；
   - 手机端通知栏支持快捷“暂停操作”或“暂停全部访问”。
 - **可靠的通信与异常处理**：
+  - 支持终端二维码与手机本地扫码配对，同时保留手动输入；
   - 手机主动发起出站 WebSocket 长连接，断网自动退避重连；
   - 手机凭据基于 Android Keystore (AES-GCM) 硬件级加密保存，Bridge 端仅存储散列值；
   - 请求包含唯一 ID 与超时时间戳，超时或断网绝不重放副作用操作。
@@ -62,6 +63,7 @@ Anthropic 的 Computer Use 让我们看到了大模型直接与操作系统图�
 
 - 🚀 **[部署与使用指南 (docs/DEPLOYMENT.md)](docs/DEPLOYMENT.md)**  
   Bridge 服务构建与启动、一次性配对码生成、手机端 APK 编译与安装、Agent Harness 接入（Streamable HTTP 与 stdio 模式）及生产反向代理配置。
+  支持 Docker Compose 与独立可执行程序部署；独立程序内嵌运行时，Compose 会持久保存配置与设备身份。
 - 📐 **[技术实现与架构设计 (docs/IMPLEMENTATION.md)](docs/IMPLEMENTATION.md)**  
   模块职责划分、主动出站中继架构、无障碍截图实现机制、双重凭证隔离与安全边界考量。
 - **[Android 界面与组件 (docs/ANDROID-UI.md)](docs/ANDROID-UI.md)**

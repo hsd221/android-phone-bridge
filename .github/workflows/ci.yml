@@ -18,6 +18,23 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: npm run build
+      - run: npm run package:binary
+      - name: Smoke test the standalone executable
+        shell: bash
+        run: node scripts/smoke-binary.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bridge-binary-${{ runner.os }}-${{ runner.arch }}
+          path: artifacts/phone-bridge-*
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: docker build -t phone-bridge:ci .
+      - run: node scripts/smoke-container.mjs phone-bridge:ci
   android:
     runs-on: ubuntu-latest
     steps:

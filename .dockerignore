@@ -1,0 +1,10 @@
+# Only build inputs enter the context: never ship local identities or signing material.
+**
+!package.json
+!package-lock.json
+!tsconfig.json
+!bridge/
+!bridge/src/
+!bridge/src/**
+!docker/
+!docker/entrypoint.sh

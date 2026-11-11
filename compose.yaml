@@ -1,0 +1,20 @@
+services:
+  bridge:
+    image: ${PHONE_BRIDGE_IMAGE:-phone-bridge:local}
+    build: .
+    init: true
+    restart: unless-stopped
+    ports:
+      - "${BRIDGE_BIND_ADDRESS:-127.0.0.1}:${BRIDGE_PORT:-8787}:8787"
+    environment:
+      PHONE_BRIDGE_PUBLIC_URL: ${BRIDGE_PUBLIC_URL:?Set BRIDGE_PUBLIC_URL in .env to the address reachable from the phone}
+      PHONE_BRIDGE_ALLOW_INSECURE_LAN: ${BRIDGE_ALLOW_INSECURE_LAN:-false}
+    volumes:
+      - bridge-data:/data
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  bridge-data:

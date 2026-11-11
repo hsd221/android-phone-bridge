@@ -1,0 +1,71 @@
+name: Build distributions
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  binary:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run package:binary
+      - name: Test standalone executable outside the checkout
+        shell: bash
+        run: node scripts/smoke-binary.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.os }}
+          path: artifacts/phone-bridge-*
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: docker build -t phone-bridge:distribution .
+      - run: node scripts/smoke-container.mjs phone-bridge:distribution
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Build multi-platform OCI archive
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          tags: phone-bridge:distribution
+          push: false
+          outputs: type=oci,dest=${{ runner.temp }}/phone-bridge-container.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: container-oci
+          path: ${{ runner.temp }}/phone-bridge-container.tar
+          compression-level: 0
+  checksums:
+    needs: [binary, container]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: distributions
+          merge-multiple: true
+      - name: Collect distribution files
+        working-directory: distributions
+        run: |
+          rm -f ./*.sha256
+          sha256sum phone-bridge-container.tar phone-bridge-*-linux-* phone-bridge-*-windows-*.exe > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: distributions/
+          compression-level: 0

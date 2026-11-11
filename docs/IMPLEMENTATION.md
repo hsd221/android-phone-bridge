@@ -11,12 +11,16 @@
 | 模块 | 核心职责 | 依赖与技术栈 |
 | :--- | :--- | :--- |
 | `bridge` | 负责配对码生成与校验、设备身份散列存储、管理与手机的 WebSocket 长连接会话、请求生命周期与超时调度，并向外部暴露标准 MCP 接口与命令行管理工具。 | Node.js 22+、MCP SDK、TypeScript、ws |
-| `android` | 手机端原生应用。通过前台服务保活、主动建立长连接、利用系统无障碍服务实现界面层级解析与手势模拟、获取系统定位、提供权限配置界面。 | Android 11+ (API 30+)、Kotlin、OkHttp、Coroutines |
+| `android` | 手机端原生应用。通过前台服务保活、主动建立长连接、利用系统无障碍服务实现界面层级解析与手势模拟、获取系统定位、提供权限配置及本地扫码界面。 | Android 11+ (API 30+)、Kotlin、OkHttp、Coroutines、ZXing Core |
 | `protocol` | Bridge 与手机之间的 WebSocket 通信契约、错误码定义及工具参数规范。 | JSON over WebSocket Schema |
 
 ---
 
 ## 关键技术选型与考量
+
+部署使用同一份 Bridge 代码：Docker 多阶段构建剔除开发依赖，非 Root 进程把配置和身份写入独立数据卷；单文件发行使用 Node.js 22 SEA，把 CLI 和依赖打成 CommonJS 后注入对应平台的 Node 可执行文件。`ws` 可选原生加速模块使用 JavaScript 回退，不从用户磁盘动态加载插件。`scripts/package-binary.mjs` 仅接受本机 Node.js 22，为当前操作系统和架构构建；手动分发工作流覆盖 Linux x64/arm64 和 Windows x64，产物及校验和上传到 Actions，不创建 Release 或推送镜像。
+
+`QrScannerActivity` 使用 Camera2 的预览及 YUV 图像流，仅把亮度平面交给 ZXing `QRCodeReader`。解码限制频率，退出或后台时关闭相机会话，不引入模型或相机框架。二维码经 `PairingPayload` 验证后，由 `MainActivity` 显示地址确认并复用手动配对流程。
 
 ### 1. 手机主动出站连接的架构选择
 移动设备在 Wi-Fi 与蜂窝数据网络之间频繁切换，且普遍处于运营商 NAT 或局域网防火墙后方，无法直接作为服务端监听入站端口。  

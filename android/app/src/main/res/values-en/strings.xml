@@ -1,4 +1,14 @@
 <resources>
+    <string name="scan_pairing">Scan to pair</string>
+    <string name="scan_pairing_detail">Scan the pairing QR code shown in your Bridge terminal</string>
+    <string name="scan_pairing_hint">Point the camera at the QR code. Camera frames are never saved or uploaded.</string>
+    <string name="scan_camera_permission_denied">Camera permission was not granted. Go back to enter the address and code manually, or allow the camera in app settings and try again.</string>
+    <string name="scan_camera_unavailable">The camera is unavailable. Close other camera apps and try again, or go back to pair manually.</string>
+    <string name="scan_pairing_invalid">This QR code is invalid, expired, or not a Phone Bridge pairing code. Generate a new one in your Bridge terminal.</string>
+    <string name="scan_pairing_confirm">Confirm Bridge address</string>
+    <string name="scan_pairing_confirm_detail">Server address:\n%1$s\n\nCheck that this is your Bridge. After filling in the details, tap Pair and connect to finish pairing.</string>
+    <string name="scan_pairing_http">This address uses unencrypted HTTP. Enable Allow local HTTP yourself only if you intend to use LAN development mode.</string>
+    <string name="scan_pairing_use">Fill pairing details</string>
     <string name="call_display_settings">Tool call status</string>
     <string name="call_display_detail">Task status appears only while calls are pending or running and is removed after all calls finish. Disable only the connection category to hide idle notifications.</string>
     <string name="live_updates_toggle">Live Updates status chip</string>

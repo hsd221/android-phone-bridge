@@ -1,4 +1,7 @@
 <resources>
+    <item type="id" name="pair_scan" />
+    <item type="id" name="scan_status" />
+    <item type="id" name="scan_cancel" />
     <item name="tool_key" type="id" />
     <item type="id" name="live_updates_enabled" />
     <item type="id" name="live_updates_status" />

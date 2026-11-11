@@ -12,7 +12,7 @@
 [ AI Agent / Harness ]
          │ (MCP 协议：Streamable HTTP 或 stdio)
          ▼
-[ Bridge 桥接服务 ] (运行在电脑或服务器上，Node.js 22+)
+[ Bridge 桥接服务 ] (运行在电脑或服务器上，容器或独立程序)
          ▲
          │ (安全 WebSocket：HTTPS/WSS，手机主动出站)
 [ Android 手机 (APK) ] (Android 11+，无障碍服务 + 前台服务保活)
@@ -25,11 +25,64 @@
 
 ## 第一步：运行 Bridge 桥接服务
 
-### 1. 环境准备
+可以使用 Docker Compose、单文件程序或源码运行。三种方式提供相同的 `pair`、`status`、`revoke` 和 `mcp` 命令；配置与设备身份保存在程序外部，升级时保留这些文件。
+
+### 方式一：Docker Compose
+
+安装 Docker Engine 和 Compose 插件，下载本仓库，复制配置模板：
+
+```sh
+cp .env.example .env
+```
+
+把 `.env` 中的 `BRIDGE_PUBLIC_URL` 改为手机能够访问的 HTTPS 域名，例如 `https://phone-bridge.example.com`，并配置本文后面的 TLS 反向代理。然后运行：
+
+```sh
+docker compose up -d --build
+docker compose ps
+docker compose exec bridge node /app/dist/cli.js pair
+```
+
+镜像构建过程包含 Node.js 与依赖，宿主机无需安装 Node.js。当前 Compose 默认从源码构建；如已有与源码匹配的预构建镜像，可设置 `PHONE_BRIDGE_IMAGE`，执行 `docker compose pull` 后使用 `docker compose up -d --no-build`。
+
+默认只把服务发布到宿主机的 `127.0.0.1:8787`，交由宿主机 HTTPS 反向代理访问。容器内监听 `0.0.0.0:8787`，`behindProxy: true` 明确允许这一内部明文连接，手机仍使用 HTTPS/WSS。它不自动提供证书或反向代理。反向代理若也在容器中，应加入同一 Docker 网络并使用 `bridge:8787`，同时保留原始 `Host` 与 WebSocket 升级头。
+
+首次启动自动生成随机 Harness 令牌，配置和设备身份保存在命名卷 `bridge-data` 中的 `/data/bridge.config.json` 与 `/data/bridge-state.json`。容器使用非 Root 用户；重建或升级不会重新生成已有配置或身份。`.env` 的服务配置只在初始化时使用；之后修改卷中的配置并重启服务。备份和迁移时保存整个数据卷，不要把它提交到 Git 或放进镜像。`docker compose down` 保留数据卷，`docker compose down -v` 会删除它。
+
+管理命令同样在容器内执行：
+
+```sh
+docker compose exec bridge node /app/dist/cli.js status
+docker compose exec bridge node /app/dist/cli.js pair --qr
+```
+
+Harness 接入 HTTP MCP 时，在受保护的本地环境中读取数据卷配置里的 `harnessToken`，作为 `/mcp` 的 Bearer 令牌。只支持 stdio 的本机 Harness 可使用 `docker compose exec -T bridge node /app/dist/cli.js mcp`；`-T` 避免终端控制字符污染 MCP。
+
+仅做局域网开发时，可以在首次启动前设置 `BRIDGE_PUBLIC_URL=http://电脑局域网IP:8787`、`BRIDGE_BIND_ADDRESS=电脑局域网IP` 和 `BRIDGE_ALLOW_INSECURE_LAN=true`，并在手机上单独允许 HTTP。不要把容器内部 IP、`0.0.0.0` 或 `127.0.0.1` 作为手机连接地址。
+
+### 方式二：单文件可执行程序
+
+如所选 [Release](https://github.com/hsd221/android-phone-bridge/releases) 附件提供 `phone-bridge-<版本>-linux-x64`、`linux-arm64` 或 `windows-x64.exe`，下载对应平台文件并核对 `SHA256SUMS`。旧版本可能只提供 APK。独立程序内嵌 Node.js，无需另外安装运行时；Linux 使用 glibc 环境（推荐 Ubuntu 24.04+），Windows 使用 Windows 11。
+
+将程序放入专用目录。Linux 先执行 `chmod +x <文件名>`，然后可重命名为 `phone-bridge`：
+
+```sh
+./phone-bridge init --config bridge.config.json --public-url https://phone-bridge.example.com
+./phone-bridge serve --config bridge.config.json
+# 在另一个终端生成二维码
+./phone-bridge pair --config bridge.config.json
+```
+
+Windows PowerShell 使用 `.\phone-bridge.exe`，其余参数相同。默认监听 `127.0.0.1:8787`，需要按本文配置 HTTPS 反向代理。配置和身份文件默认相对于配置文件所在目录，升级只替换可执行程序，保留数据文件。可用 `--version` 查询程序版本；`PHONE_BRIDGE_CONFIG` 可指定默认配置路径。
+
+### 方式三：从源码运行
+
+#### 环境准备
+
 - **Node.js**：22.0.0 或更高版本。
 - 操作系统：Ubuntu Linux（推荐 24.04+）或 Windows 11。
 
-### 2. 编译与初始化
+#### 编译与初始化
 克隆本仓库后，在项目根目录下安装依赖并执行编译：
 
 ```sh
@@ -45,7 +98,7 @@ node dist/cli.js init --config bridge.config.json
 
 > **说明**：`init` 命令会自动生成一个随机的高强度 Harness Bearer 令牌并写入 `bridge.config.json`。若该文件已存在，不会被覆盖。
 
-### 3. 启动服务
+#### 启动服务
 在终端中启动 Bridge 服务：
 
 ```sh
@@ -54,16 +107,20 @@ node dist/cli.js serve --config bridge.config.json
 
 默认情况下，服务会监听在 `127.0.0.1:8787`。请保持该进程持续运行。
 
-### 4. 生成配对码
+### 生成二维码或手动配对码
 打开另一个终端窗口，执行以下命令为手机生成一次性配对码：
 
 ```sh
 node dist/cli.js pair --config bridge.config.json
 ```
 
-终端会输出一段 16 位字符（64-bit 熵）的大写十六进制配对码。
+交互式终端会输出黑白二维码、服务地址和 16 位字符（64-bit 熵）的大写十六进制配对码。手机可扫码填入，也可手动输入。
+
 - 配对码**有效期为 5 分钟**，且**仅供单次使用**。
 - 若超时或重新执行了 `pair` 命令，先前的配对码会自动失效。
+- 输出被重定向时默认不画二维码；`--qr` 强制输出，`--no-qr` 仅输出文字，`--json` 输出机器可读的配对信息。二维码包含临时凭据，请勿公开截图或保存到共享日志。
+- 扫码时应让完整二维码和四周白色留白同时可见；若终端窗口发生换行或截断，请扩大窗口或缩小终端字体，也可使用文字配对码。
+- `serve` 不自动输出配对凭据，避免临时凭据进入服务日志。已有设备绑定时，`pair` 会明确报冲突，需先由用户解除旧设备。
 
 你可以随时通过以下命令查看当前 Bridge 的连接状态：
 
@@ -98,10 +155,12 @@ cd android
 
 ### 2. 安装与初次配对
 1. 将下载的正式 APK 或自行构建的 APK 安装至手机（要求 Android 11 / API 30 及以上版本，无需 Root）。
-2. 打开应用的“连接”页，输入 Bridge 服务的对外访问地址（例如 `https://phone-bridge.example.com` 或局域网调试地址）以及前述生成的一次性配对码，点击确认配对。
+2. 打开应用的“连接”页，点击“扫码配对”，按需授予相机权限并扫描终端二维码。核对服务地址后选择“填入配对信息”，再点击“配对并连接”。也可手动输入地址和一次性配对码；相机不可用或拒绝权限不会影响手动配对。HTTP 地址需另外手动开启“允许局域网 HTTP”。
 3. 配对成功后，手机端会使用系统 Keystore 中的密钥加密身份凭据后保存在本机。只要网络连通，后续均会在后台自动重连，无需重复配对。
 
 > **注意**：请勿将 `bridge.config.json` 中的 Harness 令牌输入手机，手机端使用独立的配对流程与设备凭证。
+
+扫码在手机本地完成，相机帧不保存、不上传，不依赖 Google Play 服务或模型下载；离开扫码页就释放相机。扫码只填入地址和临时配对码，不更改工具或应用授权。
 
 ### 3. 权限与授权配置
 为了保障设备安全，所有工具权限开关和应用访问在首次安装时**默认处于关闭状态**，需按需开启：
@@ -249,9 +308,11 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now phone-bridge
 ```
 
+使用独立程序时，把 `ExecStart` 改为 `/你的安装目录/phone-bridge serve --config /你的数据目录/bridge.config.json`，其余守护配置相同。
+
 ### 3. Windows 11 环境部署
 在 Windows 系统中，可直接在 PowerShell 中运行。若需开机后台自启：
-1. 可在 Windows 任务计划程序中添加任务，在用户登录后以后台方式执行 `node.exe dist/cli.js serve --config bridge.config.json`；
+1. 可在 Windows 任务计划程序中添加任务，在用户登录后以后台方式执行 `phone-bridge.exe serve --config bridge.config.json`（源码方式使用 `node.exe dist/cli.js serve --config bridge.config.json`）；
 2. 配置任务失败后自动重启，工作目录设定为项目根目录；
 3. 配合同机运行的 Caddy 提供 HTTPS 反代，或配合局域网穿透工具。注意 Windows 防火墙仅开放必要端口。
 
