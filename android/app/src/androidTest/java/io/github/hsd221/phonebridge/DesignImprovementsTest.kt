@@ -398,11 +398,20 @@ class DesignImprovementsTest {
             lockScreenAndPolicy()
             completed = true
         } finally {
-            prefs.identity?.let { BridgeNetwork.revoke(it) }
-            prefs.identity = null
-            prefs.setFlag("pausedAll", true)
-            if (completed) context.startActivity(Intent().setClassName(fixturePackage, DesignControlsFixture::class.java.name)
-                .putExtra("close", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            try {
+                prefs.identity?.let { identity ->
+                    harnessClient.newCall(Request.Builder().url("${identity.url}/device/revoke")
+                        .header("Authorization", "Bearer ${identity.token}").delete().build()).execute().use { response ->
+                        assertTrue("Design fixture identity revocation was not acknowledged", response.code in setOf(200, 401))
+                    }
+                    note("PASS: Design fixture identity revocation acknowledged.")
+                }
+            } finally {
+                prefs.identity = null
+                prefs.setFlag("pausedAll", true)
+                if (completed) context.startActivity(Intent().setClassName(fixturePackage, DesignControlsFixture::class.java.name)
+                    .putExtra("close", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
         }
     }
 }

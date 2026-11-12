@@ -42,6 +42,9 @@ class DeviceSmokeTest {
     private val token = arguments.getString("harnessToken")!!
     private val prefs = BridgePrefs(context)
     private val demo = "io.github.hsd221.phonebridge.demo"
+    private val homePackage get() = context.packageManager.resolveActivity(
+        Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+        ?.activityInfo?.packageName ?: error("Dedicated emulator has no resolvable HOME activity")
     private val requestId = AtomicInteger()
     private val harnessClient = BridgeNetwork.client.newBuilder().connectionPool(ConnectionPool(0, 1, TimeUnit.SECONDS)).build()
     private fun note(message: String) = instrumentation.sendStatus(0, android.os.Bundle().apply { putString("stream", "$message\n") })
@@ -68,6 +71,31 @@ class DeviceSmokeTest {
             delay(100)
         }
         fail("MainActivity did not stably resume before $phase; scenario=${scenario.state}")
+    }
+    private fun backWindowState(): Pair<String?, Boolean> {
+        val accessibility = PhoneAccessibilityService.instance ?: error("Accessibility service disconnected during navigation")
+        return accessibility.rootInActiveWindow?.packageName?.toString() to accessibility.windows.any {
+            it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD
+        }
+    }
+    private suspend fun awaitHomeAfterAcceptedBack() {
+        val expected = homePackage
+        val deadline = android.os.SystemClock.elapsedRealtime() + 15000
+        var stableSince = 0L
+        var last: Pair<String?, Boolean>? = null
+        while (android.os.SystemClock.elapsedRealtime() < deadline) {
+            last = backWindowState()
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (last == (expected to false)) {
+                if (stableSince == 0L) stableSince = now
+                if (now - stableSince >= 300) {
+                    note("PASS: accepted BACK settled at HOME=$expected with no IME before opening Bridge settings.")
+                    return
+                }
+            } else stableSince = 0L
+            delay(100)
+        }
+        fail("Accepted BACK did not settle at HOME before opening settings; expected=$expected, observed=$last")
     }
     private fun mcp(tool: String, args: JSONObject = JSONObject()): JSONObject {
         val request = JSONObject().put("jsonrpc", "2.0").put("id", requestId.incrementAndGet()).put("method", "tools/call")
@@ -275,7 +303,11 @@ class DeviceSmokeTest {
             assertFalse("Reconnect did not close the previous session", BridgeService.connected)
             awaitConnection("Phone did not reconnect after an explicit reconnect")
             ok("phone_open_app", app()); awaitUi()
+            note("Smoke navigation before BACK: active=${backWindowState().first}, ime=${backWindowState().second}")
             ok("phone_back", app())
+            // GLOBAL_ACTION_BACK is only accepted at return. Observe its completion
+            // before starting MainActivity, so the pending BACK cannot close that new screen.
+            awaitHomeAfterAcceptedBack()
             if (arguments.getString("shizuku") == "true") {
                 authorizeShizuku()
                 prefs.shizukuEnabled = true; delay(200)
@@ -297,9 +329,17 @@ class DeviceSmokeTest {
                 assertNull("Bridge did not acknowledge revocation", prefs.pendingRevocation)
             }
         } finally {
-            prefs.identity?.let { BridgeNetwork.revoke(it) }
-            prefs.identity = null
-            prefs.setFlag("pausedAll", true)
+            try {
+                prefs.identity?.let { identity ->
+                    harnessClient.newCall(Request.Builder().url("${identity.url}/device/revoke")
+                        .header("Authorization", "Bearer ${identity.token}").delete().build()).execute().use { response ->
+                        assertTrue("Smoke fixture identity revocation was not acknowledged", response.code in setOf(200, 401))
+                    }
+                }
+            } finally {
+                prefs.identity = null
+                prefs.setFlag("pausedAll", true)
+            }
         }
     }
 }
