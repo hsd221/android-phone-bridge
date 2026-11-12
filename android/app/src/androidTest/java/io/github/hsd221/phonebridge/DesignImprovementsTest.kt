@@ -90,6 +90,20 @@ class DesignImprovementsTest {
             }
         }
     }
+    private fun homeAfterImeDismissal() {
+        repeat(10) {
+            navigationReady(waitForImeDismissal = true)
+            val result = mcp("phone_key", JSONObject().put("key", "HOME"))
+            if (result.optBoolean("ok")) return
+            val failure = result.getJSONObject("error")
+            assertFalse(result.toString(), failure.optBoolean("outcomeUnknown"))
+            assertTrue(result.toString(), failure.getString("code") in setOf("WINDOW_UNAVAILABLE", "UI_UNAVAILABLE"))
+            // A disappearing system window refused this request before dispatch.
+            // Observe fresh windows before issuing the still-unperformed HOME action.
+            Thread.sleep(150)
+        }
+        fail("System windows never stabilized for HOME after IME dismissal")
+    }
     private fun tabReady() {
         eventually("Fixture input focus and forward target did not settle") {
             val root = PhoneAccessibilityService.instance!!.rootInActiveWindow ?: return@eventually false
@@ -360,8 +374,7 @@ class DesignImprovementsTest {
             denied("OPERATIONS_PAUSED", "phone_key", JSONObject().put("key", "BACK"))
             prefs.setFlag("pausedOperations", false)
             ok("phone_key", JSONObject().put("key", "BACK"))
-            navigationReady(waitForImeDismissal = true) // Observe IME dismissal before sending a distinct global action.
-            ok("phone_key", JSONObject().put("key", "HOME"))
+            homeAfterImeDismissal()
             eventually("HOME did not leave the fixture") {
                 PhoneAccessibilityService.instance?.rootInActiveWindow?.packageName?.toString() == homePackage
             }
