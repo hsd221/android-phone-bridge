@@ -118,6 +118,10 @@
     <string name="err_key_rejected">系统拒绝了 %1$s 按键操作。</string>
     <string name="tool_unlock">phone_unlock · 解锁</string>
     <string name="tool_unlock_detail">使用本机单独授权的凭据唤醒并解锁手机。</string>
+    <string name="tool_lock">phone_lock · 锁屏</string>
+    <string name="tool_lock_detail">通过无障碍请求锁屏；当前所有窗口仍需操作授权，已锁屏时不会唤醒。</string>
+    <string name="err_lock_unavailable">系统当前不提供无障碍锁屏操作。</string>
+    <string name="err_lock_rejected">系统拒绝了锁屏请求。</string>
     <string name="enable_all_tools">开启全部工具</string>
     <string name="enable_all_tools_success">已开启全部工具；应用和系统授权需分别设置</string>
     <string name="disable_all_tools">关闭全部工具</string>

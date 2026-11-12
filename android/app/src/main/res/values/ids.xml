@@ -80,6 +80,7 @@
     <item type="id" name="tool_input" />
     <item type="id" name="tool_back" />
     <item type="id" name="tool_unlock" />
+    <item type="id" name="tool_lock" />
     <item type="id" name="connection_state" />
     <item type="id" name="manage_app_permissions" />
     <item type="id" name="access_state" />

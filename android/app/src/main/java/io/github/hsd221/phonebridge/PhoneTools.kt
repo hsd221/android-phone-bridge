@@ -41,6 +41,7 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
             "phone_set_clipboard" -> setClipboard(args.getString("text"), ensure)
             "phone_media" -> media(args.optString("kind", "all"), args.optInt("limit", 50))
             "phone_unlock" -> LocalUnlocker(service, prefs).unlock(ensure)
+            "phone_lock" -> accessibility().lock(ensure)
             "phone_location" -> withTimeout(args.optLong("timeoutMs", 15000)) { location(ensure) }
             "phone_ui" -> accessibility().readUi(args.optInt("maxNodes", 300))
             "phone_screenshot" -> accessibility().screenshot(args.optInt("maxDimension", 1080), ensure)
@@ -307,7 +308,7 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
             if (value !is Number || value.toDouble() % 1.0 != 0.0 || value.toLong() !in min.toLong()..max.toLong()) throw ToolFailure("INVALID_ARGUMENT", text(R.string.err_argument_invalid, key))
         }
         val keys = when (tool) {
-            "phone_status", "phone_device_info", "phone_clipboard", "phone_unlock" -> emptySet()
+            "phone_status", "phone_device_info", "phone_clipboard", "phone_unlock", "phone_lock" -> emptySet()
             "phone_apps" -> setOf("includeSystem").also { if (args.has("includeSystem") && args.opt("includeSystem") !is Boolean) throw ToolFailure("INVALID_ARGUMENT", text(R.string.err_argument_invalid, "includeSystem")) }
             "phone_notifications" -> setOf("maxItems").also { range("maxItems", 1, 100) }
             "phone_set_clipboard" -> setOf("text").also { if (args.opt("text") !is String || args.getString("text").length > 10000) throw ToolFailure("INVALID_ARGUMENT", text(R.string.err_input_text_invalid)) }

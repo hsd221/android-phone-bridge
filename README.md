@@ -34,13 +34,14 @@ Anthropic 的 Computer Use 让我们看到了大模型直接与操作系统图�
 
 ### 核心能力一览
 
-- **17 项 MCP 工具**：
+- **18 项 MCP 工具**：
   - 感知：设备状态 (`phone_status`)、设备信息 (`phone_device_info`)、应用列表 (`phone_apps`)、实时定位 (`phone_location`)、界面层级 (`phone_ui`)、屏幕截图 (`phone_screenshot`)、活动通知 (`phone_notifications`)、剪贴板 (`phone_clipboard`)、媒体元数据 (`phone_media`)
-  - 操作：本地解锁 (`phone_unlock`)、启动应用 (`phone_open_app`)、点击与长按 (`phone_tap`)、手势滑动 (`phone_swipe`)、文本输入 (`phone_input`)、系统返回 (`phone_back`)、通用按键 (`phone_key`)、写入剪贴板 (`phone_set_clipboard`)
+  - 操作：本地解锁 (`phone_unlock`)、主动锁屏 (`phone_lock`)、启动应用 (`phone_open_app`)、点击与长按 (`phone_tap`)、手势滑动 (`phone_swipe`)、文本输入 (`phone_input`)、系统返回 (`phone_back`)、通用按键 (`phone_key`)、写入剪贴板 (`phone_set_clipboard`)
 - **可选本地解锁**：
   - 单独开启后，可唤醒手机并请求系统解除锁屏，支持在手机端配置数字 PIN、文字密码或图案；
   - 锁屏凭据仅在手机本地加密保存与使用，解锁工具无参数，Bridge 和 AI 不接收凭据；
   - 未识别的系统锁屏、指纹或人脸验证交给用户；一次输入未确认成功后停止自动尝试。
+- **主动锁屏**：`phone_lock` 在独立工具授权和当前窗口操作授权通过后，通过无障碍请求系统锁屏；升级后默认关闭，已锁屏时不会唤醒手机。调用后用 `phone_status.screen` 核对实际状态。
 - **细粒度权限控制**：
   - 默认全部拒绝，支持针对每个应用分别配置“读取”与“操作”权限；
   - “连接 / 访问 / 设置”三页导航，支持系统深色模式、大字体和即时状态刷新；

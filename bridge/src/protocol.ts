@@ -13,6 +13,7 @@ export const toolInputs = {
   phone_set_clipboard: z.object({ text: z.string().max(10000) }).strict(),
   phone_media: z.object({ kind: z.enum(['images', 'videos', 'all']).default('all'), limit: z.number().int().min(1).max(100).default(50) }).strict(),
   phone_unlock: z.object({}).strict(),
+  phone_lock: z.object({}).strict(),
   phone_location: z.object({ timeoutMs: z.number().int().min(1000).max(20000).default(15000) }).strict(),
   phone_ui: z.object({ maxNodes: z.number().int().min(1).max(500).default(300) }).strict(),
   phone_screenshot: z.object({ maxDimension: z.number().int().min(256).max(1440).default(1080) }).strict(),
@@ -38,6 +39,7 @@ export const toolDescriptions: Record<ToolName, string> = {
   phone_set_clipboard: 'Replace the clipboard text. Android may show its normal clipboard privacy notice.',
   phone_media: 'List recent image and video metadata from shared media after the corresponding media permission is granted.',
   phone_unlock: 'Wake and unlock the phone using only credentials configured locally on that phone. Requires separate phone-side opt-in and operation permission. Takes no PIN, password, or pattern. Never automatically retry a failed unlock; biometric-only or unsupported lock screens require the user.',
+  phone_lock: 'Request an explicit screen lock through accessibility. Requires its own phone-side tool permission and operation authorization for every visible window. Does not toggle power or wake an already locked phone. accepted confirms dispatch; use phone_status.screen to observe the result. Never replay an uncertain operation.',
   phone_location: 'Get a fresh location on demand. Requires phone-side permission; may return approximate location.',
   phone_ui: 'Read the current authorized visible UI. Node IDs expire after another UI read, UI change, or reconnect. Passwords are redacted.',
   phone_screenshot: 'Capture the authorized display. Returns scaleX=width/displayWidth and scaleY=height/displayHeight; divide screenshot coordinates by these scales for physical screen coordinates. Secure or unauthorized windows are refused.',
@@ -58,5 +60,5 @@ export function failure(code: string, message: string, outcomeUnknown = false): 
   return { ok: false, error: { code, message, ...(outcomeUnknown ? { outcomeUnknown } : {}) } };
 }
 export function isTool(name: string): name is ToolName { return Object.hasOwn(toolInputs, name); }
-export const isOperation = (name: ToolName) => ['phone_unlock', 'phone_open_app', 'phone_tap', 'phone_swipe', 'phone_input', 'phone_back', 'phone_key', 'phone_set_clipboard'].includes(name);
+export const isOperation = (name: ToolName) => ['phone_unlock', 'phone_lock', 'phone_open_app', 'phone_tap', 'phone_swipe', 'phone_input', 'phone_back', 'phone_key', 'phone_set_clipboard'].includes(name);
 export const bridgeInfo = () => ({ version: BRIDGE_VERSION, protocol: PROTOCOL_VERSION, supportedTools: Object.keys(toolInputs) });

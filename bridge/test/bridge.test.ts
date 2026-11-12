@@ -96,18 +96,20 @@ test('real MCP client lists and calls phone tools, including image content', asy
     });
     await client.connect(new StreamableHTTPClientTransport(new URL(`${f.base}/mcp`), { requestInit: { headers: f.auth } }));
     const tools = await client.listTools();
-    assert.equal(tools.tools.length, 17);
+    assert.equal(tools.tools.length, 18);
     for (const name of ['phone_device_info', 'phone_apps', 'phone_notifications', 'phone_clipboard', 'phone_set_clipboard', 'phone_media']) {
       assert(tools.tools.some(tool => tool.name === name), `missing ${name}`);
     }
     assert(!tools.tools.some(t => /shell/i.test(t.name)));
-    const unlock = tools.tools.find(t => t.name === 'phone_unlock');
-    assert(unlock);
-    assert.deepEqual(unlock.inputSchema.properties, {});
-    assert.equal(unlock.inputSchema.additionalProperties, false);
-    assert.equal(unlock.annotations?.readOnlyHint, false);
-    assert.equal(unlock.annotations?.destructiveHint, true);
-    assert.equal(unlock.annotations?.idempotentHint, false);
+    for (const name of ['phone_lock', 'phone_unlock']) {
+      const tool = tools.tools.find(t => t.name === name);
+      assert(tool, `missing ${name}`);
+      assert.deepEqual(tool.inputSchema.properties, {});
+      assert.equal(tool.inputSchema.additionalProperties, false);
+      assert.equal(tool.annotations?.readOnlyHint, false);
+      assert.equal(tool.annotations?.destructiveHint, true);
+      assert.equal(tool.annotations?.idempotentHint, false);
+    }
     const status = await client.callTool({ name: 'phone_status', arguments: {} });
     assert.equal(status.isError, false);
     const image = await client.callTool({ name: 'phone_screenshot', arguments: {} });
@@ -138,36 +140,40 @@ test('disconnect fails in-flight actions and reconnect never replays them', asyn
   } finally { await f.close(); }
 });
 
-test('unlock rejects credential parameters and forwards only an empty command', async () => {
+for (const tool of ['phone_lock', 'phone_unlock'] as const) {
+test(`${tool} rejects extra parameters and forwards only an empty command`, async () => {
   const f = await fixture();
   try {
     const identity = await f.pair();
     const ws = await f.connect(identity.token);
     const incoming: any[] = [];
     ws.on('message', raw => incoming.push(JSON.parse(raw.toString())));
-    for (const args of [{ pin: 'synthetic-pin' }, { password: 'synthetic-password' }, { pattern: 'synthetic-pattern' }, { text: 'synthetic-text' }]) {
-      assert.equal((await f.call('phone_unlock', args)).error.code, 'INVALID_ARGUMENT');
+    for (const args of [{ pin: 'synthetic-pin' }, { password: 'synthetic-password' }, { pattern: 'synthetic-pattern' },
+      { text: 'synthetic-text' }, { key: 'POWER' }, { packageName: 'com.example.app' }]) {
+      assert.equal((await f.call(tool, args)).error.code, 'INVALID_ARGUMENT');
     }
     ws.ping(); await once(ws, 'pong');
     assert.equal(incoming.length, 0, 'invalid credential-bearing commands must not reach the phone');
     const request = once(ws, 'message');
-    const pending = f.call('phone_unlock');
+    const pending = f.call(tool);
     const [raw] = await request;
     const message = JSON.parse(raw.toString());
-    assert.equal(message.tool, 'phone_unlock');
+    assert.equal(message.tool, tool);
     assert.deepEqual(message.args, {});
-    ws.send(JSON.stringify({ type: 'result', id: message.id, deviceId: f.deviceId, result: { ok: true, data: { unlocked: true, path: 'local_credential' } } }));
-    assert.deepEqual((await pending).data, { unlocked: true, path: 'local_credential' });
+    const data = tool === 'phone_lock' ? { accepted: true, alreadyLocked: false, path: 'accessibility' }
+      : { unlocked: true, path: 'local_credential' };
+    ws.send(JSON.stringify({ type: 'result', id: message.id, deviceId: f.deviceId, result: { ok: true, data } }));
+    assert.deepEqual((await pending).data, data);
   } finally { await f.close(); }
 });
 
-test('unlock disconnect and cancellation are uncertain operations and never replay', async () => {
+test(`${tool} disconnect and cancellation are uncertain operations and never replay`, async () => {
   const f = await fixture();
   try {
     const identity = await f.pair();
     const ws = await f.connect(identity.token);
     const request = once(ws, 'message');
-    const pending = f.call('phone_unlock');
+    const pending = f.call(tool);
     await request;
     ws.terminate();
     const result = await pending;
@@ -181,12 +187,12 @@ test('unlock disconnect and cancellation are uncertain operations and never repl
 
     const controller = new AbortController();
     const dispatched = once(next, 'message');
-    const cancelled = f.bridge.broker.call('phone_unlock', {}, controller.signal);
+    const cancelled = f.bridge.broker.call(tool, {}, controller.signal);
     const [raw] = await dispatched;
     controller.abort();
     const cancellation = await cancelled;
     assert.equal(cancellation.ok, false);
-    if (cancellation.ok) throw new Error('Cancelled unlock succeeded');
+    if (cancellation.ok) throw new Error(`Cancelled ${tool} succeeded`);
     assert.equal(cancellation.error.code, 'CANCELLED');
     assert.equal(cancellation.error.outcomeUnknown, true);
     next.ping(); await once(next, 'pong');
@@ -194,6 +200,7 @@ test('unlock disconnect and cancellation are uncertain operations and never repl
     assert.equal(incoming[1].id, JSON.parse(raw.toString()).id);
   } finally { await f.close(); }
 });
+}
 
 test('deadline sends cancellation and late results cannot resolve another request', async () => {
   const f = await fixture(80);
@@ -225,7 +232,7 @@ test('stdio CLI forwards MCP calls to the running authenticated bridge', async (
     await writeFile(configPath, JSON.stringify({ ...f.config, port: Number(new URL(f.base).port), publicUrl: f.base }));
     await client.connect(new StdioClientTransport({ command: process.execPath,
       args: ['--import', 'tsx', 'bridge/src/cli.ts', 'mcp', '--config', configPath] }));
-    assert.equal((await client.listTools()).tools.length, 17);
+    assert.equal((await client.listTools()).tools.length, 18);
     const result = await client.callTool({ name: 'phone_status', arguments: {} });
     assert.equal(result.isError, false);
     const offline = JSON.parse((result.content as any[])[0].text);

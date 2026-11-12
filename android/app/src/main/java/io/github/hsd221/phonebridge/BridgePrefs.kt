@@ -52,8 +52,8 @@ class BridgePrefs(private val context: Context) {
         } else {
             // Existing installations used capability switches. Read them as a
             // compatibility view until the user saves tool settings.
-            // The new global-key tool needs its own opt-in after an upgrade.
-            BridgeTools.toolsFor(legacyCapabilities) - "phone_key"
+            // New global actions need their own opt-in after an upgrade.
+            BridgeTools.toolsFor(legacyCapabilities) - setOf("phone_key", "phone_lock")
         }
         return AccessPolicy(
             pausedAll = preferences.getBoolean("pausedAll", false),

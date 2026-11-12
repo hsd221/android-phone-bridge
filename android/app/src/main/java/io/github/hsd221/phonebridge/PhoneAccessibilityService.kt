@@ -68,6 +68,23 @@ class PhoneAccessibilityService : AccessibilityService() {
         return root
     }
 
+    fun lock(ensure: () -> Unit): JSONObject {
+        ensure()
+        prefs.policy().requireTool("phone_lock")
+        if (getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
+            return JSONObject().put("accepted", true).put("alreadyLocked", true).put("path", "none")
+        }
+        if (systemActions.none { it.id == GLOBAL_ACTION_LOCK_SCREEN }) {
+            throw ToolFailure("ACTION_UNAVAILABLE", text(R.string.err_lock_unavailable))
+        }
+        authorizedRoot("phone_lock")
+        ensure()
+        val accepted = performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN)
+        invalidate()
+        if (!accepted) throw ToolFailure("ACTION_REJECTED", text(R.string.err_lock_rejected))
+        return JSONObject().put("accepted", true).put("alreadyLocked", false).put("path", "accessibility")
+    }
+
     fun readUi(maxNodes: Int): JSONObject {
         val root = authorizedRoot("phone_ui")
         val epoch = uiEpoch

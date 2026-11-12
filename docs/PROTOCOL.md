@@ -146,7 +146,7 @@ Bridge 将来自 MCP 的工具调用封装为 JSON 请求包发送给手机端�
 
 ### 2. 工具列表与坐标体系
 
-协议目前支持 17 项核心工具（具体参数详见 `bridge/src/protocol.ts`）：
+协议目前支持 18 项核心工具（具体参数详见 `bridge/src/protocol.ts`）：
 - `phone_status`：查询设备连接状态、Android 系统版本、两级暂停标志、逐工具权限、按应用授权清单及 Shizuku 运行状态。`tools` 是以 `phone_*` 为键的逐项授权结果；`capabilities` 作为旧客户端兼容字段保留。`appVersion` 与 `appVersionCode` 标识手机 APK 版本，便于确认升级；`screen` 包含亮屏、键盘锁、设备锁与首解状态；`unlock` 包含独立授权、是否配置本地凭据、是否阻止重试及固定的最近尝试状态，不包含凭据、节点或屏幕内容。
 - `phone_device_info`：返回型号、Android 版本、安全补丁、电量、充电状态、屏幕尺寸、密度、语言与时区。
 - `phone_apps`：列出可启动应用及版本；`includeSystem` 为 `true` 时包含系统应用。仅返回系统可见的启动入口，不读取应用私有数据。
@@ -154,6 +154,7 @@ Bridge 将来自 MCP 的工具调用封装为 JSON 请求包发送给手机端�
 - `phone_clipboard` / `phone_set_clipboard`：读取或替换文本剪贴板，分别受 Android 剪贴板隐私和工具/操作授权控制。
 - `phone_media`：按 `images`、`videos` 或 `all` 列出共享媒体元数据；必须授予对应 Android 媒体读取权限，不返回媒体内容。
 - `phone_unlock`：空参数 `{}`，唤醒并使用手机本地配置请求解锁。需要 `phone_unlock` 工具授权及独立解锁授权，受两级暂停控制。开启全部工具不会开启此授权。PIN、密码与图案不属于协议字段，任何额外参数都会被拒绝。成功返回 `unlocked: true`、`path` 与屏幕状态；`path` 区分 `already_unlocked`、`system`、`local_credential` 和 `shizuku`。Shizuku 未连接或输入前不可用时可回退无障碍，已开始凭据输入则不切换路径重试；需要人工或系统不支持时明确返回错误，不能盲目重试。
+- `phone_lock`：仅接受空参数 `{}`，通过无障碍 `GLOBAL_ACTION_LOCK_SCREEN` 请求锁屏。工具开关默认关闭，不继承旧操作能力组的授权；受两级暂停控制，不依赖解锁授权或本地凭据。未锁屏时校验实际前台及所有可见窗口的操作授权，桥接设置仍不可远程操作。系统不提供该动作返回 `ACTION_UNAVAILABLE`，系统拒绝派发返回 `ACTION_REJECTED`，无障碍未开启返回 `ACCESSIBILITY_UNAVAILABLE`。正常返回 `accepted: true, alreadyLocked: false, path: "accessibility"`，只确认请求已接受，须另用 `phone_status.screen` 观察实际锁定与亮屏状态；已处于键盘锁时返回 `accepted: true, alreadyLocked: true, path: "none"`，仍检查工具授权和暂停状态，不唤醒或再次派发。它属于操作类请求，断线或结果不明时不得重放。
 - `phone_location`：获取设备当前定位（经纬度、精度及时间戳）。
 - `phone_ui`：获取当前可见窗口的无障碍节点树与文本内容。不可见父容器不会截断其可见后代；返回节点包含 `clickable` 和 `longClickable`，隐藏节点不进入结果。遍历仍受节点与访问数量上限约束，并校验窗口和可见控件的所属应用授权。
 - `phone_screenshot`：获取屏幕截屏（返回图片 Base64 与物理分辨率元数据）。

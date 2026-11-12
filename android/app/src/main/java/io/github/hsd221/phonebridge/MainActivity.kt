@@ -227,11 +227,12 @@ class MainActivity : Activity() {
             Triple("phone_back", getString(R.string.tool_back), getString(R.string.tool_back_detail)),
             Triple("phone_key", getString(R.string.tool_key), getString(R.string.tool_key_detail)),
             Triple("phone_unlock", getString(R.string.tool_unlock), getString(R.string.tool_unlock_detail)),
+            Triple("phone_lock", getString(R.string.tool_lock), getString(R.string.tool_lock_detail)),
         )
         val ids = listOf(
             R.id.tool_device_info, R.id.tool_apps, R.id.tool_notifications, R.id.tool_clipboard, R.id.tool_set_clipboard, R.id.tool_media,
             R.id.tool_location, R.id.tool_ui, R.id.tool_screenshot, R.id.tool_open_app,
-            R.id.tool_tap, R.id.tool_swipe, R.id.tool_input, R.id.tool_back, R.id.tool_key, R.id.tool_unlock,
+            R.id.tool_tap, R.id.tool_swipe, R.id.tool_input, R.id.tool_back, R.id.tool_key, R.id.tool_unlock, R.id.tool_lock,
         )
         specs.forEachIndexed { i, (tool, title, detail) ->
             if (i > 0) ui.divider(tools)

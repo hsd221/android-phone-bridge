@@ -26,7 +26,7 @@ test('key and long-press contracts reject unbounded or ambiguous actions', () =>
     assert(toolInputs.phone_key.safeParse({ key }).success);
     assert(toolInputs.phone_key.safeParse({ key, packageName: 'com.example.app' }).success);
   }
-  for (const args of [{ key: 'POWER' }, { key: 'BACK; input text unsafe' }, { key: 4 }, {},
+  for (const args of [{ key: 'POWER' }, { key: 'SLEEP' }, { key: 'BACK; input text unsafe' }, { key: 4 }, {},
     { key: 'BACK', allowSystemOverlay: true }, { key: 'BACK', packageName: '' }]) {
     assert(!toolInputs.phone_key.safeParse(args).success, JSON.stringify(args));
   }
@@ -42,6 +42,15 @@ test('key and long-press contracts reject unbounded or ambiguous actions', () =>
     assert(!toolInputs.phone_tap.safeParse({ ...point, durationMs }).success);
   }
   assert(!toolInputs.phone_tap.safeParse({ ...node, x: 1, y: 2 }).success);
+});
+
+test('lock is a separate empty operation rather than a power-key command', () => {
+  assert.deepEqual(toolInputs.phone_lock.parse({}), {});
+  assert(isOperation('phone_lock'));
+  for (const args of [null, [], 'POWER', 0, { key: 'POWER' }, { wake: true }, { force: true },
+    { packageName: 'com.example.app' }, { timeoutMs: 5000 }, { pin: 'synthetic-pin' }]) {
+    assert(!toolInputs.phone_lock.safeParse(args).success, JSON.stringify(args));
+  }
 });
 
 test('status discovers bridge version and tool support with an offline or online phone', async () => {

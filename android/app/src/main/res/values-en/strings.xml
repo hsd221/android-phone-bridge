@@ -119,6 +119,10 @@
     <string name="err_key_rejected">The system rejected the %1$s key action.</string>
     <string name="tool_unlock">phone_unlock · Unlock</string>
     <string name="tool_unlock_detail">Wake and unlock the phone using separately authorized local credentials.</string>
+    <string name="tool_lock">phone_lock · Lock screen</string>
+    <string name="tool_lock_detail">Request a screen lock through accessibility. All current windows need operation access. An already locked phone stays asleep.</string>
+    <string name="err_lock_unavailable">The system does not currently offer an accessibility screen lock action.</string>
+    <string name="err_lock_rejected">The system rejected the screen lock request.</string>
     <string name="enable_all_tools">Enable all tools</string>
     <string name="enable_all_tools_success">All tools enabled; app and system grants are configured separately</string>
     <string name="disable_all_tools">Disable all tools</string>

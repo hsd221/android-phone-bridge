@@ -67,4 +67,22 @@ class PolicyTest {
             AccessPolicy(pausedAll = true, capabilities = Capability.entries.toSet(), unlockEnabled = true).requireTool("phone_unlock")
         }
     }
+    @Test fun lockNeedsAnIndependentToolGrantAndNeverRequiresUnlockAuthorization() {
+        denied("CAPABILITY_DENIED") { AccessPolicy().requireTool("phone_lock") }
+        denied("CAPABILITY_DENIED") {
+            AccessPolicy(capabilities = Capability.entries.toSet(), unlockEnabled = true).requireTool("phone_lock")
+        }
+        denied("CAPABILITY_DENIED") {
+            AccessPolicy(tools = BridgeTools.all.toSet() - "phone_lock", toolPermissionsConfigured = true,
+                unlockEnabled = true).requireTool("phone_lock")
+        }
+        val lockOnly = AccessPolicy(tools = setOf("phone_lock"), toolPermissionsConfigured = true)
+        lockOnly.requireTool("phone_lock")
+        denied("CAPABILITY_DENIED") { lockOnly.requireTool("phone_unlock") }
+        denied("OPERATIONS_PAUSED") { lockOnly.copy(pausedOperations = true).requireTool("phone_lock") }
+        denied("PAUSED") { lockOnly.copy(pausedAll = true).requireTool("phone_lock") }
+        lockOnly.copy(pausedAll = true).requireTool("phone_status")
+        assertEquals(true, "phone_lock" in BridgeTools.operations)
+        assertEquals(Capability.OPERATE, BridgeTools.capability("phone_lock"))
+    }
 }
