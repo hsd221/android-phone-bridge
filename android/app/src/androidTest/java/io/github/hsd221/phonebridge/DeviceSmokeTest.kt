@@ -10,13 +10,17 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.test.core.app.ActivityScenario
+import androidx.lifecycle.Lifecycle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.ConnectionPool
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
@@ -25,6 +29,7 @@ import org.junit.Test
 import org.junit.Rule
 import org.junit.runner.RunWith
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.TimeUnit
 
 /** Dedicated device/emulator only. Run using scripts/android-smoke.ts, never a personal phone implicitly. */
 @RunWith(AndroidJUnit4::class)
@@ -38,10 +43,36 @@ class DeviceSmokeTest {
     private val prefs = BridgePrefs(context)
     private val demo = "io.github.hsd221.phonebridge.demo"
     private val requestId = AtomicInteger()
+    private val harnessClient = BridgeNetwork.client.newBuilder().connectionPool(ConnectionPool(0, 1, TimeUnit.SECONDS)).build()
+    private fun note(message: String) = instrumentation.sendStatus(0, android.os.Bundle().apply { putString("stream", "$message\n") })
+    private suspend fun onStableMain(scenario: ActivityScenario<MainActivity>, phase: String, action: (MainActivity) -> Unit) {
+        val deadline = android.os.SystemClock.elapsedRealtime() + 15000
+        var previous: MainActivity? = null
+        var stableSince = 0L
+        while (android.os.SystemClock.elapsedRealtime() < deadline) {
+            var current: MainActivity? = null
+            instrumentation.runOnMainSync {
+                current = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
+                    .filterIsInstance<MainActivity>().singleOrNull { !it.isDestroyed && !it.isFinishing && it.hasWindowFocus() }
+            }
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (current != null && current === previous && scenario.state == Lifecycle.State.RESUMED) {
+                if (now - stableSince >= 300) {
+                    note("Smoke UI phase: $phase; stable resumed MainActivity")
+                    // Invoke exactly once. Lifecycle or action failures remain failures; never
+                    // relaunch the screen or replay pairing/unpairing to hide a destroyed Activity.
+                    scenario.onActivity { activity -> assertSame("MainActivity changed before $phase", current, activity); action(activity) }
+                    return
+                }
+            } else { previous = current; stableSince = now }
+            delay(100)
+        }
+        fail("MainActivity did not stably resume before $phase; scenario=${scenario.state}")
+    }
     private fun mcp(tool: String, args: JSONObject = JSONObject()): JSONObject {
         val request = JSONObject().put("jsonrpc", "2.0").put("id", requestId.incrementAndGet()).put("method", "tools/call")
             .put("params", JSONObject().put("name", tool).put("arguments", args))
-        BridgeNetwork.client.newCall(Request.Builder().url("$base/mcp").header("Authorization", "Bearer $token")
+        harnessClient.newCall(Request.Builder().url("$base/mcp").header("Authorization", "Bearer $token")
             .header("Accept", "application/json, text/event-stream").post(request.toString().toRequestBody("application/json".toMediaType())).build()).execute().use {
             assertEquals(200, it.code)
             val envelope = JSONObject(it.body!!.string())
@@ -149,16 +180,17 @@ class DeviceSmokeTest {
         assertNull("Smoke test refuses to replace an existing phone identity", prefs.identity)
         try {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-                scenario.onActivity { activity ->
+                onStableMain(scenario, "submit pairing") { activity ->
                     activity.findViewById<EditText>(R.id.pair_address).setText(base)
                     activity.findViewById<EditText>(R.id.pair_code).setText(arguments.getString("pairCode")!!)
                     activity.findViewById<Switch>(R.id.pair_allow_http).performClick()
                     activity.findViewById<Button>(R.id.pair_submit).performClick()
                 }
+                note("Smoke UI phase: recreate after pairing submission")
                 scenario.recreate()
                 repeat(150) { if (prefs.identity == null) delay(100) }
                 assertNotNull("Pairing through the connection page did not save an identity", prefs.identity)
-                scenario.onActivity { activity ->
+                onStableMain(scenario, "verify paired HTTP warning after recreation") { activity ->
                     assertTrue("The real HTTP connection is missing its plaintext notice", containsUiText(activity.window.decorView, "此连接使用 HTTP 明文"))
                 }
             }
@@ -254,10 +286,10 @@ class DeviceSmokeTest {
                 prefs.shizukuEnabled = false
             }
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-                scenario.onActivity { it.findViewById<Button>(R.id.unpair).performClick() }
+                onStableMain(scenario, "open unpair confirmation for cancel") { it.findViewById<Button>(R.id.unpair).performClick() }
                 chooseDialogAction("取消")
                 assertNotNull("Cancelling unpair changed the connection identity", prefs.identity)
-                scenario.onActivity { it.findViewById<Button>(R.id.unpair).performClick() }
+                onStableMain(scenario, "open unpair confirmation for revoke") { it.findViewById<Button>(R.id.unpair).performClick() }
                 chooseDialogAction("解除配对")
                 assertNull("Unpair did not stop local access immediately", prefs.identity)
                 assertTrue("Unpair did not pause access", prefs.policy().pausedAll)

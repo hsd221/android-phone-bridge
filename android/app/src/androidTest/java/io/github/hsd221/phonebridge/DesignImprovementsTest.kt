@@ -11,6 +11,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
+import okhttp3.ConnectionPool
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.MediaType.Companion.toMediaType
@@ -20,6 +21,7 @@ import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.concurrent.TimeUnit
 
 /** Real MCP calls against an isolated, foreign-package accessibility fixture on an emulator. */
 @RunWith(AndroidJUnit4::class)
@@ -34,13 +36,16 @@ class DesignImprovementsTest {
         Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
         ?.activityInfo?.packageName ?: error("Dedicated emulator has no resolvable HOME activity")
     private var requestId = 0
+    // The harness must not reuse a pairing keep-alive that the phone WebSocket can replace.
+    // Preserve retryOnConnectionFailure=false; no MCP request is replayed.
+    private val harnessClient = BridgeNetwork.client.newBuilder().connectionPool(ConnectionPool(0, 1, TimeUnit.SECONDS)).build()
     private fun note(value: String) = instrumentation.sendStatus(0, android.os.Bundle().apply { putString("stream", "$value\n") })
     private fun shell(command: String) = instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
         .executeShellCommand(command).use { ParcelFileDescriptor.AutoCloseInputStream(it).readBytes().toString(Charsets.UTF_8) }
     private fun mcp(tool: String, args: JSONObject = JSONObject()): JSONObject {
         val request = JSONObject().put("jsonrpc", "2.0").put("id", ++requestId).put("method", "tools/call")
             .put("params", JSONObject().put("name", tool).put("arguments", args))
-        return BridgeNetwork.client.newCall(Request.Builder().url("${arguments.getString("bridgeUrl")!!}/mcp")
+        return harnessClient.newCall(Request.Builder().url("${arguments.getString("bridgeUrl")!!}/mcp")
             .header("Authorization", "Bearer ${arguments.getString("harnessToken")!!}")
             .header("Accept", "application/json, text/event-stream")
             .post(request.toString().toRequestBody("application/json".toMediaType())).build()).execute().use {
