@@ -146,13 +146,16 @@ Bridge 将来自 MCP 的工具调用封装为 JSON 请求包发送给手机端�
 
 ### 2. 工具列表与坐标体系
 
-协议目前支持 18 项核心工具（具体参数详见 `bridge/src/protocol.ts`）：
+协议目前支持 19 项核心工具（具体参数详见 `bridge/src/protocol.ts`）：
+
 - `phone_status`：查询设备连接状态、Android 系统版本、两级暂停标志、逐工具权限、按应用授权清单及 Shizuku 运行状态。`tools` 是以 `phone_*` 为键的逐项授权结果；`capabilities` 作为旧客户端兼容字段保留。`appVersion` 与 `appVersionCode` 标识手机 APK 版本，便于确认升级；`screen` 包含亮屏、键盘锁、设备锁与首解状态；`unlock` 包含独立授权、是否配置本地凭据、是否阻止重试及固定的最近尝试状态，不包含凭据、节点或屏幕内容。
 - `phone_device_info`：返回型号、Android 版本、安全补丁、电量、充电状态、屏幕尺寸、密度、语言与时区。
 - `phone_apps`：列出可启动应用及版本；`includeSystem` 为 `true` 时包含系统应用。仅返回系统可见的启动入口，不读取应用私有数据。
 - `phone_notifications`：读取活动通知标题和正文摘要。必须启用通知访问服务，并且通知所属应用已开放读取权限。
-- `phone_clipboard` / `phone_set_clipboard`：读取或替换文本剪贴板，分别受 Android 剪贴板隐私和工具/操作授权控制。
+- `phone_clipboard`：空参数 `{}`，要求设备未锁屏并开放该工具。用户启用并授权非 Root Shizuku 时，优先使用 shell UID 2000 的受限服务读取本用户剪贴板，否则尝试原生 Android API。读到剪贴板时返回 `available: true`、`hasText`、`text`、`label`、`truncated`、`path`（`android` 或 `shizuku`）及 `capturedAt`。只取首项已有文本，最多 10000 个 UTF-16 字符，标签最多 200 个字符；非文本内容返回 `hasText: false, text: null`，不读取 URI 或 Intent 所指向的内容。两条路径均返回空值时报 `CLIPBOARD_UNAVAILABLE`，不能将 Android 的空返回解释为“剪贴板没有内容”，因为后台拒绝读取也返回空值。
+- `phone_set_clipboard`：替换文本剪贴板，受独立工具和操作授权控制；Android 可能显示正常的剪贴板隐私提示。
 - `phone_media`：按 `images`、`videos` 或 `all` 列出共享媒体元数据；必须授予对应 Android 媒体读取权限，不返回媒体内容。
+- `phone_media_read`：参数 `{uri, maxBytes?}`。只接受 `phone_media` 所用的规范条目 URI：`content://media/external/images/media/<id>` 或 `content://media/external/video/media/<id>`；`id` 为无前导零的正 64 位有符号整数，不接受其他 provider、卷名、查询参数、片段或转义路径。需要独立工具授权及对应 Android 图片或视频权限；旧媒体列表或能力组授权不能自动开启内容读取。`maxBytes` 为 1–4194304 的整数，默认 1048576。先按元数据拒绝超限，再在流读取时限制实际字节数；超限报错，不返回截断内容。MIME 必须是与集合相符的 `image/*` 或 `video/*`。成功返回 `{uri, mimeType, name, sizeBytes, base64, capturedAt}`，`sizeBytes` 是实际读取长度，`name` 最多 200 字符或为 `null`。MCP 把 PNG、JPEG、WebP、GIF 转为图像内容，其他图片及视频转为含 `uri`、`mimeType`、`blob` 的嵌入资源，并附不含 Base64 的文本元数据。此工具属于读取请求，暂停操作不阻止读取；暂停全部、撤销授权或取消请求会停止返回内容。
 - `phone_unlock`：空参数 `{}`，唤醒并使用手机本地配置请求解锁。需要 `phone_unlock` 工具授权及独立解锁授权，受两级暂停控制。开启全部工具不会开启此授权。PIN、密码与图案不属于协议字段，任何额外参数都会被拒绝。成功返回 `unlocked: true`、`path` 与屏幕状态；`path` 区分 `already_unlocked`、`system`、`local_credential` 和 `shizuku`。Shizuku 未连接或输入前不可用时可回退无障碍，已开始凭据输入则不切换路径重试；需要人工或系统不支持时明确返回错误，不能盲目重试。
 - `phone_lock`：仅接受空参数 `{}`，通过无障碍 `GLOBAL_ACTION_LOCK_SCREEN` 请求锁屏。工具开关默认关闭，不继承旧操作能力组的授权；受两级暂停控制，不依赖解锁授权或本地凭据。未锁屏时校验实际前台及所有可见窗口的操作授权，桥接设置仍不可远程操作。系统不提供该动作返回 `ACTION_UNAVAILABLE`，系统拒绝派发返回 `ACTION_REJECTED`，无障碍未开启返回 `ACCESSIBILITY_UNAVAILABLE`。正常返回 `accepted: true, alreadyLocked: false, path: "accessibility"`，只确认请求已接受，须另用 `phone_status.screen` 观察实际锁定与亮屏状态；已处于键盘锁时返回 `accepted: true, alreadyLocked: true, path: "none"`，仍检查工具授权和暂停状态，不唤醒或再次派发。它属于操作类请求，断线或结果不明时不得重放。
 - `phone_location`：获取设备当前定位（经纬度、精度及时间戳）。
@@ -257,6 +260,12 @@ Bridge 可主动发送取消消息：
 | `STALE_NODE` | 目标 `nodeId` 已失效，UI 树已发生变化。 |
 | `PERMISSION_REQUIRED` | 缺少对应的 Android 系统权限（如普通定位权限未授予）。 |
 | `BACKGROUND_LOCATION_REQUIRED`| 缺少系统“始终允许”后台定位权限。 |
+| `CLIPBOARD_UNAVAILABLE` | 剪贴板为空或系统拒绝访问，无法确认内容；后台读取可在手机上启用并授权 Shizuku。 |
+| `MEDIA_PERMISSION_REQUIRED` | 缺少或已撤销对应 Android 图片或视频读取权限。 |
+| `MEDIA_NOT_FOUND` | 规范 URI 所指的媒体条目不存在或已删除。 |
+| `MEDIA_TYPE_UNSUPPORTED` | 媒体 MIME 无效，或与图片、视频集合不符。 |
+| `MEDIA_TOO_LARGE` | 声明大小或实际内容超过本次 `maxBytes` 限制，不返回部分内容。 |
+| `MEDIA_UNAVAILABLE` | 媒体 provider 或内容暂不可读取。 |
 | `ACCESSIBILITY_UNAVAILABLE` | 手机无障碍服务未启用或被系统强行终止。 |
 | `DEVICE_LOCKED` | 设备处于锁屏状态，常规界面工具拒绝访问。 |
 | `USER_UNLOCK_REQUIRED` | 需用户完成解锁，例如重启首解、生物识别、尚未配置本地凭据或锁屏已有输入。 |

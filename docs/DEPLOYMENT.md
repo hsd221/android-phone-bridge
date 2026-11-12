@@ -245,7 +245,7 @@ Bridge 支持通过两种标准方式接入任意 MCP 客户端。
 
 更新源码后执行 `npm ci`、`npm run build`，再重启常驻 Bridge 服务；只重启 stdio 子进程不会替换旧的 `serve` 进程。systemd 部署可使用 `sudo systemctl restart phone-bridge`。重启会结束在途请求，操作结果未知时先观察手机，不要自动重放。
 
-通过 `phone_status.bridge` 或 `node dist/cli.js status` 返回的 `bridge` 核对运行版本、协议与 `supportedTools`。手机离线时仍可查看服务端信息；手机在线后再结合 `appVersion` 和逐工具授权 `tools` 确认设备支持。升级后的 `phone_key` 开关默认关闭，需要在手机“访问”页单独开启。
+通过 `phone_status.bridge` 或 `node dist/cli.js status` 返回的 `bridge` 核对运行版本、协议与 `supportedTools`。手机离线时仍可查看服务端信息；手机在线后再结合 `appVersion` 和逐工具授权 `tools` 确认设备支持。升级后的 `phone_key`、`phone_lock` 和 `phone_media_read` 开关默认关闭，需要在手机“访问”页单独开启。媒体内容读取还需对应 Android 图片或视频权限，开启媒体列表不会自动开启内容读取；后台剪贴板读取可在“设置”启用并授权非 Root Shizuku，未获准读取时返回明确错误。
 
 `TOOL_NOT_SUPPORTED_BY_BRIDGE` 表示当前常驻服务尚未注册工具，通常需要重新构建并重启；`BRIDGE_AUTH_FAILED` 与 `BRIDGE_ACCESS_DENIED` 分别表示凭证及访问检查被拒绝，和网络不可达分开报告。
 

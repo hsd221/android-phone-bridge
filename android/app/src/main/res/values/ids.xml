@@ -72,6 +72,7 @@
     <item type="id" name="tool_clipboard" />
     <item type="id" name="tool_set_clipboard" />
     <item type="id" name="tool_media" />
+    <item type="id" name="tool_media_read" />
     <item type="id" name="tool_ui" />
     <item type="id" name="tool_screenshot" />
     <item type="id" name="tool_open_app" />

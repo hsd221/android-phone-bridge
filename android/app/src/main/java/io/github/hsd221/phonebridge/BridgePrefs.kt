@@ -52,8 +52,8 @@ class BridgePrefs(private val context: Context) {
         } else {
             // Existing installations used capability switches. Read them as a
             // compatibility view until the user saves tool settings.
-            // New global actions need their own opt-in after an upgrade.
-            BridgeTools.toolsFor(legacyCapabilities) - setOf("phone_key", "phone_lock")
+            // New actions and binary media access need their own opt-in after an upgrade.
+            BridgeTools.toolsFor(legacyCapabilities) - setOf("phone_key", "phone_lock", "phone_media_read")
         }
         return AccessPolicy(
             pausedAll = preferences.getBoolean("pausedAll", false),
@@ -83,7 +83,7 @@ class BridgePrefs(private val context: Context) {
         }
         val selectedTools = when {
             tools != null -> tools.intersect(BridgeTools.all.toSet())
-            capabilities != null -> BridgeTools.toolsFor(capabilities)
+            capabilities != null -> BridgeTools.toolsFor(capabilities) - "phone_media_read"
             else -> null
         }
         selectedTools?.let { enabled ->
@@ -101,7 +101,10 @@ class BridgePrefs(private val context: Context) {
             val capability = runCatching { Capability.valueOf(key.removePrefix("cap_")) }.getOrNull()
             if (capability != null) {
                 val enabled = policy().tools.toMutableSet()
-                BridgeTools.all.filter { BridgeTools.capability(it) == capability }.forEach { if (value) enabled.add(it) else enabled.remove(it) }
+                BridgeTools.all.filter { BridgeTools.capability(it) == capability }.forEach {
+                    // The legacy MEDIA switch may list media, but cannot grant binary access.
+                    if (value && it != "phone_media_read") enabled.add(it) else if (!value) enabled.remove(it)
+                }
                 setPermissions(tools = enabled)
                 return
             }

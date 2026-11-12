@@ -19,6 +19,16 @@ export function createMcpServer(call: Caller) {
             { type: 'text' as const, text: JSON.stringify({ ok: true, data: metadata }) }], isError: false };
         }
       }
+      if (tool === 'phone_media_read' && result.ok) {
+        const data = result.data as { base64?: unknown; mimeType?: unknown; uri?: unknown } | null;
+        if (data && typeof data.base64 === 'string' && typeof data.mimeType === 'string' && typeof data.uri === 'string') {
+          const { base64: _base64, ...metadata } = data;
+          const content = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(data.mimeType)
+            ? { type: 'image' as const, data: data.base64, mimeType: data.mimeType }
+            : { type: 'resource' as const, resource: { uri: data.uri, mimeType: data.mimeType, blob: data.base64 } };
+          return { content: [content, { type: 'text' as const, text: JSON.stringify({ ok: true, data: metadata }) }], isError: false };
+        }
+      }
       return { content: [{ type: 'text' as const, text: JSON.stringify(result) }], isError: !result.ok };
     });
   }

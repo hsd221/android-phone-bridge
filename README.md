@@ -22,7 +22,7 @@ Anthropic 的 Computer Use 让我们看到了大模型直接与操作系统图�
 - **以普通未 Root 设备为基础，兼顾现实与安全性**：  
   - 基础感知和操作使用 Android 无障碍及系统权限；可选增强仅接受非 Root Shizuku 的 shell UID 2000。
   - 远端工具使用固定参数和预定义动作，覆盖 UI、手势及系统按键，不提供通用 Shell 接口。
-  - Shizuku 为应用启动、本地解锁和固定输入提供受限增强；动作开始前不可用时回退无障碍，已开始的动作不会换路重放。
+  - Shizuku 为应用启动、本地解锁、固定输入及后台剪贴板读取提供受限增强；动作开始前不可用时回退无障碍，已开始的动作不会换路重放。
 - **人机协同与用户最高控制权**：  
   在控制权规则上，用户始终拥有最高优先级，可随时收回控制。我们并未将“用户正在使用手机”一律作为禁止 AI 操作的硬性条件，因为现实中存在大量人机协同场景；经用户明确授权，AI 在用户使用手机期间亦可执行操作。系统通过能力与应用默认全拒绝、细粒度分权授权，以及在手机前台通知中提供即时“暂停操作”或“暂停全部访问”，确保用户对控制权拥有绝对掌控。
 - **手机主动出站，适配移动网络**：  
@@ -34,14 +34,16 @@ Anthropic 的 Computer Use 让我们看到了大模型直接与操作系统图�
 
 ### 核心能力一览
 
-- **18 项 MCP 工具**：
-  - 感知：设备状态 (`phone_status`)、设备信息 (`phone_device_info`)、应用列表 (`phone_apps`)、实时定位 (`phone_location`)、界面层级 (`phone_ui`)、屏幕截图 (`phone_screenshot`)、活动通知 (`phone_notifications`)、剪贴板 (`phone_clipboard`)、媒体元数据 (`phone_media`)
+- **19 项 MCP 工具**：
+  - 感知：设备状态 (`phone_status`)、设备信息 (`phone_device_info`)、应用列表 (`phone_apps`)、实时定位 (`phone_location`)、界面层级 (`phone_ui`)、屏幕截图 (`phone_screenshot`)、活动通知 (`phone_notifications`)、剪贴板 (`phone_clipboard`)、媒体元数据 (`phone_media`)、媒体内容 (`phone_media_read`)
   - 操作：本地解锁 (`phone_unlock`)、主动锁屏 (`phone_lock`)、启动应用 (`phone_open_app`)、点击与长按 (`phone_tap`)、手势滑动 (`phone_swipe`)、文本输入 (`phone_input`)、系统返回 (`phone_back`)、通用按键 (`phone_key`)、写入剪贴板 (`phone_set_clipboard`)
 - **可选本地解锁**：
   - 单独开启后，可唤醒手机并请求系统解除锁屏，支持在手机端配置数字 PIN、文字密码或图案；
   - 锁屏凭据仅在手机本地加密保存与使用，解锁工具无参数，Bridge 和 AI 不接收凭据；
   - 未识别的系统锁屏、指纹或人脸验证交给用户；一次输入未确认成功后停止自动尝试。
 - **主动锁屏**：`phone_lock` 在独立工具授权和当前窗口操作授权通过后，通过无障碍请求系统锁屏；升级后默认关闭，已锁屏时不会唤醒手机。调用后用 `phone_status.screen` 核对实际状态。
+- **后台剪贴板读取**：未锁屏时可使用用户启用并授权的非 Root Shizuku 读取文本。系统返回空值时明确报 `CLIPBOARD_UNAVAILABLE`，因为 Android 无法区分空剪贴板与拒绝访问；不会把 URI 或 Intent 转为文本读取。
+- **有界媒体内容读取**：`phone_media_read` 使用媒体列表中的图片或视频 URI，需独立开启工具并授予对应 Android 媒体权限；默认最多 1 MiB，可设为最多 4 MiB，超限直接拒绝。常见图片以 MCP 图像返回，其他媒体以二进制资源返回。
 - **细粒度权限控制**：
   - 默认全部拒绝，支持针对每个应用分别配置“读取”与“操作”权限；
   - “连接 / 访问 / 设置”三页导航，支持系统深色模式、大字体和即时状态刷新；

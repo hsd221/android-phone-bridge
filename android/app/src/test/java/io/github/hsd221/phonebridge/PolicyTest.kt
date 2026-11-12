@@ -7,6 +7,19 @@ import java.util.UUID
 
 class PolicyTest {
     private fun denied(code: String, action: () -> Unit) = assertEquals(code, assertThrows(ToolFailure::class.java, action).code)
+    @Test fun binaryMediaIsIndependentAndReadOnly() {
+        denied("CAPABILITY_DENIED") { AccessPolicy().requireTool("phone_media_read") }
+        denied("CAPABILITY_DENIED") { AccessPolicy(capabilities = setOf(Capability.MEDIA)).requireTool("phone_media_read") }
+        denied("CAPABILITY_DENIED") {
+            AccessPolicy(tools = setOf("phone_media"), toolPermissionsConfigured = true).requireTool("phone_media_read")
+        }
+        val media = AccessPolicy(tools = setOf("phone_media_read"), toolPermissionsConfigured = true)
+        media.requireTool("phone_media_read")
+        media.copy(pausedOperations = true).requireTool("phone_media_read")
+        denied("PAUSED") { media.copy(pausedAll = true).requireTool("phone_media_read") }
+        assertEquals(false, "phone_media_read" in BridgeTools.operations)
+        assertEquals(Capability.MEDIA, BridgeTools.capability("phone_media_read"))
+    }
     @Test fun defaultDenyAndSeparateReadFromOperate() {
         denied("CAPABILITY_DENIED") { AccessPolicy().requireTool("phone_ui") }
         denied("APP_DENIED") { AccessPolicy().requireApp("com.example.test") }

@@ -1,9 +1,14 @@
 import { z } from 'zod';
 
 export const PROTOCOL_VERSION = 1;
-export const BRIDGE_VERSION = '0.3.0';
+export const BRIDGE_VERSION = '0.3.1-pre.1';
 export const packageName = z.string().regex(/^[a-zA-Z][\w]*(\.[\w]+)+$/).max(255);
 const point = z.number().int().min(0).max(16384);
+const mediaUriPattern = /^content:\/\/media\/external\/(images|video)\/media\/([1-9][0-9]{0,18})$/;
+const mediaUri = z.string().max(80).regex(mediaUriPattern).refine(value => {
+  const match = mediaUriPattern.exec(value);
+  return match?.[0] === value && BigInt(match[2]!) <= 9223372036854775807n;
+}, 'Media ID must fit a positive signed 64-bit integer');
 export const toolInputs = {
   phone_status: z.object({}).strict(),
   phone_device_info: z.object({}).strict(),
@@ -12,6 +17,7 @@ export const toolInputs = {
   phone_clipboard: z.object({}).strict(),
   phone_set_clipboard: z.object({ text: z.string().max(10000) }).strict(),
   phone_media: z.object({ kind: z.enum(['images', 'videos', 'all']).default('all'), limit: z.number().int().min(1).max(100).default(50) }).strict(),
+  phone_media_read: z.object({ uri: mediaUri, maxBytes: z.number().int().min(1).max(4194304).default(1048576) }).strict(),
   phone_unlock: z.object({}).strict(),
   phone_lock: z.object({}).strict(),
   phone_location: z.object({ timeoutMs: z.number().int().min(1000).max(20000).default(15000) }).strict(),
@@ -35,9 +41,10 @@ export const toolDescriptions: Record<ToolName, string> = {
   phone_device_info: 'Read device model, Android version, battery, display, locale, and time zone information.',
   phone_apps: 'List installed launchable applications and their versions. System packages are hidden unless requested.',
   phone_notifications: 'Read active notifications after the user enables the notification access service and authorizes their apps.',
-  phone_clipboard: 'Read the current clipboard text when Android allows clipboard access.',
+  phone_clipboard: 'Read up to 10000 characters of clipboard text, using optional user-enabled Shizuku for background access. An empty or system-denied read returns CLIPBOARD_UNAVAILABLE rather than claiming the clipboard is empty. URI and Intent clips are never fetched or coerced to text. Requires an unlocked phone.',
   phone_set_clipboard: 'Replace the clipboard text. Android may show its normal clipboard privacy notice.',
   phone_media: 'List recent image and video metadata from shared media after the corresponding media permission is granted.',
+  phone_media_read: 'Read an image or video from a canonical content://media/external item URI returned by phone_media. Requires its own phone-side tool grant and the corresponding Android media permission. maxBytes defaults to 1048576 and cannot exceed 4194304; oversized content is refused without truncation. Common image formats return MCP image content; other media return an embedded binary resource.',
   phone_unlock: 'Wake and unlock the phone using only credentials configured locally on that phone. Requires separate phone-side opt-in and operation permission. Takes no PIN, password, or pattern. Never automatically retry a failed unlock; biometric-only or unsupported lock screens require the user.',
   phone_lock: 'Request an explicit screen lock through accessibility. Requires its own phone-side tool permission and operation authorization for every visible window. Does not toggle power or wake an already locked phone. accepted confirms dispatch; use phone_status.screen to observe the result. Never replay an uncertain operation.',
   phone_location: 'Get a fresh location on demand. Requires phone-side permission; may return approximate location.',

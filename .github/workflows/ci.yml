@@ -107,4 +107,4 @@ jobs:
           emulator-options: -no-window ${{ matrix.graphics }} -no-snapshot -noaudio -no-boot-anim -memory 2048
           script: |
             npm run test:android -- emulator-5554
-            if [ '${{ matrix.api }}' = '35' ]; then npm run test:android:boot -- emulator-5554 && npm run test:android:unlock -- emulator-5554 && npm run test:android:unlock:shizuku -- emulator-5554; fi
+            if [ '${{ matrix.api }}' = '35' ]; then npm run test:android:boot -- emulator-5554 && npm run test:android:unlock -- emulator-5554 && npm run test:android:unlock:shizuku -- emulator-5554 && npm run test:android:data -- emulator-5554; fi

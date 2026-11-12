@@ -1,6 +1,6 @@
 {
   "name": "android-phone-bridge",
-  "version": "0.3.0",
+  "version": "0.3.1-pre.1",
   "private": true,
   "type": "module",
   "description": "Self-hosted MCP bridge for an Android phone",
@@ -12,6 +12,7 @@
     "check": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
     "test": "tsx --test bridge/test/*.test.ts",
     "test:android": "tsx scripts/android-smoke.ts",
+    "test:android:data": "tsx scripts/android-data.ts",
     "test:android:boot": "tsx scripts/android-boot.ts",
     "test:android:unlock": "tsx scripts/android-unlock.ts",
     "test:android:unlock:shizuku": "tsx scripts/android-unlock-shizuku.ts",

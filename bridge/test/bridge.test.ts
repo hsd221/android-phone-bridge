@@ -96,7 +96,7 @@ test('real MCP client lists and calls phone tools, including image content', asy
     });
     await client.connect(new StreamableHTTPClientTransport(new URL(`${f.base}/mcp`), { requestInit: { headers: f.auth } }));
     const tools = await client.listTools();
-    assert.equal(tools.tools.length, 18);
+    assert.equal(tools.tools.length, 19);
     for (const name of ['phone_device_info', 'phone_apps', 'phone_notifications', 'phone_clipboard', 'phone_set_clipboard', 'phone_media']) {
       assert(tools.tools.some(tool => tool.name === name), `missing ${name}`);
     }
@@ -232,7 +232,7 @@ test('stdio CLI forwards MCP calls to the running authenticated bridge', async (
     await writeFile(configPath, JSON.stringify({ ...f.config, port: Number(new URL(f.base).port), publicUrl: f.base }));
     await client.connect(new StdioClientTransport({ command: process.execPath,
       args: ['--import', 'tsx', 'bridge/src/cli.ts', 'mcp', '--config', configPath] }));
-    assert.equal((await client.listTools()).tools.length, 18);
+    assert.equal((await client.listTools()).tools.length, 19);
     const result = await client.callTool({ name: 'phone_status', arguments: {} });
     assert.equal(result.isError, false);
     const offline = JSON.parse((result.content as any[])[0].text);

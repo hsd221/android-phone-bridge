@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.IBinder
+import android.os.Process
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -21,13 +22,41 @@ class ShizukuSupport(private val context: Context) {
             val granted = running && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
             val uid = if (granted) Shizuku.getUid() else -1
             JSONObject().put("running", running).put("permissionGranted", granted).put("uid", uid)
-                .put("available", granted && uid == 2000).put("enhancement", "explicit_app_launch_and_local_unlock")
+                .put("available", granted && uid == 2000).put("enhancement", "explicit_app_launch_local_unlock_and_clipboard_read")
                 .put("restartRequiredAfterReboot", true)
         } catch (_: Exception) { JSONObject().put("running", false).put("permissionGranted", false).put("available", false) }
     }
     fun requestPermission() {
         if (!Shizuku.pingBinder()) throw ToolFailure("SHIZUKU_UNAVAILABLE", text(R.string.err_shizuku_start_required))
         Shizuku.requestPermission(101)
+    }
+    suspend fun readClipboard(ensure: () -> Unit): JSONObject? {
+        if (!status().optBoolean("available")) return null
+        val args = Shizuku.UserServiceArgs(ComponentName(context, ShizukuClipboardService::class.java))
+            .daemon(false).processNameSuffix("clipboard-read").version(1)
+        var connection: ServiceConnection? = null
+        try {
+            // A cold shell process can need several seconds on slower devices;
+            // the enclosing request deadline and cancellation still apply.
+            val reader = withTimeout(10000) {
+                suspendCancellableCoroutine<IClipboardReader> { continuation ->
+                    connection = object : ServiceConnection {
+                        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+                            if (continuation.isActive) continuation.resume(IClipboardReader.Stub.asInterface(binder))
+                        }
+                        override fun onServiceDisconnected(name: ComponentName?) {
+                            if (continuation.isActive) continuation.resumeWithException(ToolFailure("SHIZUKU_UNAVAILABLE", text(R.string.err_shizuku_disconnected)))
+                        }
+                    }
+                    Shizuku.bindUserService(args, connection!!)
+                }
+            }
+            ensure()
+            if (reader.uid() != 2000) return null
+            val value = withContext(Dispatchers.IO) { ensure(); reader.readText(Process.myUid() / 100000) }
+            ensure()
+            return value?.takeIf { it.length <= 65536 }?.let(::JSONObject)
+        } finally { connection?.let { runCatching { Shizuku.unbindUserService(args, it, true) } } }
     }
     suspend fun launch(component: ComponentName, ensure: () -> Unit): JSONObject {
         if (!status().optBoolean("available")) throw ToolFailure("SHIZUKU_UNAVAILABLE", text(R.string.err_shizuku_unavailable))

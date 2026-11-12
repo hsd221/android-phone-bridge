@@ -1,5 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
+        <provider android:name="io.github.hsd221.phonebridge.DataUriProvider"
+            android:authorities="io.github.hsd221.phonebridge.test.data"
+            android:exported="true" android:grantUriPermissions="true" />
+        <activity android:name="io.github.hsd221.phonebridge.DataControlsFixture"
+            android:exported="true" android:launchMode="singleTask"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
         <provider android:name="io.github.hsd221.phonebridge.DesignStateProvider"
             android:authorities="io.github.hsd221.phonebridge.test.design-state"
             android:exported="true" />

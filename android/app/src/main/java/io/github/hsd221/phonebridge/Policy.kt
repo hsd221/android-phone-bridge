@@ -6,7 +6,7 @@ enum class Capability { LOCATION, UI, SCREENSHOT, OPERATE, DEVICE, APPS, NOTIFIC
 /** The externally callable phone tools that can be enabled independently. */
 object BridgeTools {
     val all = listOf(
-        "phone_device_info", "phone_apps", "phone_notifications", "phone_clipboard", "phone_set_clipboard", "phone_media",
+        "phone_device_info", "phone_apps", "phone_notifications", "phone_clipboard", "phone_set_clipboard", "phone_media", "phone_media_read",
         "phone_location", "phone_ui", "phone_screenshot", "phone_open_app",
         "phone_tap", "phone_swipe", "phone_input", "phone_back", "phone_key", "phone_unlock", "phone_lock",
     )
@@ -17,7 +17,7 @@ object BridgeTools {
         "phone_apps" -> Capability.APPS
         "phone_notifications" -> Capability.NOTIFICATIONS
         "phone_clipboard", "phone_set_clipboard" -> Capability.CLIPBOARD
-        "phone_media" -> Capability.MEDIA
+        "phone_media", "phone_media_read" -> Capability.MEDIA
         "phone_location" -> Capability.LOCATION
         "phone_ui" -> Capability.UI
         "phone_screenshot" -> Capability.SCREENSHOT
@@ -46,7 +46,7 @@ data class AccessPolicy(
         if (pausedAll) throw ToolFailure("PAUSED", text(R.string.err_access_paused))
         val capability = BridgeTools.capability(tool) ?: throw ToolFailure("UNKNOWN_TOOL", text(R.string.err_unknown_tool))
         if (tool in BridgeTools.operations && pausedOperations) throw ToolFailure("OPERATIONS_PAUSED", text(R.string.err_operations_paused))
-        val allowed = if (tool == "phone_lock" || toolPermissionsConfigured || tools.isNotEmpty()) tool in tools else capability in capabilities
+        val allowed = if (tool in setOf("phone_lock", "phone_media_read") || toolPermissionsConfigured || tools.isNotEmpty()) tool in tools else capability in capabilities
         if (!allowed) throw ToolFailure("CAPABILITY_DENIED", text(R.string.err_tool_disabled, tool))
         if (tool == "phone_unlock" && !unlockEnabled) throw ToolFailure("CAPABILITY_DENIED", text(R.string.err_unlock_authorization_required))
     }

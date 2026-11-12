@@ -15,11 +15,15 @@ import android.os.BatteryManager
 import android.os.CancellationSignal
 import android.os.SystemClock
 import android.provider.MediaStore
+import android.net.Uri
+import android.util.Base64
 import android.view.WindowManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.coroutines.resume
@@ -37,9 +41,10 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
             "phone_device_info" -> deviceInfo()
             "phone_apps" -> apps(args.optBoolean("includeSystem", false))
             "phone_notifications" -> notifications(args.optInt("maxItems", 50))
-            "phone_clipboard" -> clipboard()
+            "phone_clipboard" -> clipboard(ensure)
             "phone_set_clipboard" -> setClipboard(args.getString("text"), ensure)
             "phone_media" -> media(args.optString("kind", "all"), args.optInt("limit", 50))
+            "phone_media_read" -> readMedia(args.getString("uri"), args.optInt("maxBytes", 1048576), ensure)
             "phone_unlock" -> LocalUnlocker(service, prefs).unlock(ensure)
             "phone_lock" -> accessibility().lock(ensure)
             "phone_location" -> withTimeout(args.optLong("timeoutMs", 15000)) { location(ensure) }
@@ -123,13 +128,27 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
         return JSONObject().put("notifications", listener.snapshot(maxItems, allowed)).put("capturedAt", System.currentTimeMillis())
     }
 
-    private fun clipboard(): JSONObject {
+    private suspend fun clipboard(ensure: () -> Unit): JSONObject {
+        val keyguard = service.getSystemService(KeyguardManager::class.java)
+        fun checkAccess() {
+            ensure()
+            if (keyguard.isKeyguardLocked || keyguard.isDeviceLocked) throw ToolFailure("DEVICE_LOCKED", text(R.string.err_device_locked))
+        }
+        checkAccess()
+        if (prefs.shizukuEnabled) {
+            val value = try { shizuku.readClipboard(::checkAccess) }
+            catch (failure: ToolFailure) { if (failure.code != "SHIZUKU_UNAVAILABLE") throw failure else null }
+            catch (_: kotlinx.coroutines.TimeoutCancellationException) { currentCoroutineContext().ensureActive(); null }
+            catch (_: android.os.RemoteException) { null }
+            checkAccess()
+            if (value != null) return value
+        }
         return try {
-            val manager = service.getSystemService(ClipboardManager::class.java)
-            val clip = manager.primaryClip
-            val value = clip?.getItemAt(0)?.coerceToText(service)?.toString()?.take(10000)
-            JSONObject().put("hasText", value != null).put("text", value ?: JSONObject.NULL)
-                .put("label", manager.primaryClipDescription?.label ?: JSONObject.NULL).put("capturedAt", System.currentTimeMillis())
+            // Android returns null both for an empty clip and for a denied background read.
+            val clip = service.getSystemService(ClipboardManager::class.java).primaryClip
+                ?: throw ToolFailure("CLIPBOARD_UNAVAILABLE", text(R.string.err_clipboard_unavailable))
+            checkAccess()
+            clipboardContent(clip, "android").also { checkAccess() }
         } catch (_: SecurityException) { throw ToolFailure("CLIPBOARD_UNAVAILABLE", text(R.string.err_clipboard_unavailable)) }
     }
 
@@ -171,6 +190,48 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
         if (Build.VERSION.SDK_INT >= 33) granted(Manifest.permission.READ_MEDIA_IMAGES) else granted(Manifest.permission.READ_EXTERNAL_STORAGE)
     } else {
         if (Build.VERSION.SDK_INT >= 33) granted(Manifest.permission.READ_MEDIA_VIDEO) else granted(Manifest.permission.READ_EXTERNAL_STORAGE)
+    }
+
+    private suspend fun readMedia(uriText: String, maxBytes: Int, ensure: () -> Unit): JSONObject = withContext(Dispatchers.IO) {
+        val reference = parseMediaUri(uriText) ?: throw ToolFailure("INVALID_ARGUMENT", text(R.string.err_argument_invalid, "uri"))
+        val requestContext = currentCoroutineContext()
+        fun checkAccess() {
+            requestContext.ensureActive()
+            ensure()
+            prefs.policy().requireTool("phone_media_read")
+            if (!mediaPermission(reference.kind)) throw ToolFailure("MEDIA_PERMISSION_REQUIRED", text(R.string.err_media_permission_required, reference.kind))
+        }
+        checkAccess()
+        val uri = Uri.parse(uriText)
+        val resolver = service.contentResolver
+        try {
+            val projection = arrayOf(MediaStore.MediaColumns.MIME_TYPE, MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DISPLAY_NAME)
+            val metadata = resolver.query(uri, projection, null, null, null)?.use { cursor ->
+                if (!cursor.moveToFirst()) throw ToolFailure("MEDIA_NOT_FOUND", text(R.string.err_media_not_found))
+                val mime = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)) ?: ""
+                if (!isMediaMimeType(reference.kind, mime)) throw ToolFailure("MEDIA_TYPE_UNSUPPORTED", text(R.string.err_media_type_unsupported))
+                val sizeIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
+                if (!cursor.isNull(sizeIndex) && cursor.getLong(sizeIndex) > maxBytes) throw ToolFailure("MEDIA_TOO_LARGE", text(R.string.err_media_too_large, maxBytes))
+                val name = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME))?.take(200)
+                mime.lowercase(java.util.Locale.ROOT) to name
+            } ?: throw ToolFailure("MEDIA_UNAVAILABLE", text(R.string.err_media_unavailable))
+            checkAccess()
+            val bytes = resolver.openInputStream(uri)?.use { readMediaBytes(it, maxBytes, ::checkAccess) }
+                ?: throw ToolFailure("MEDIA_UNAVAILABLE", text(R.string.err_media_unavailable))
+            val result = JSONObject().put("uri", uriText).put("mimeType", metadata.first)
+                .put("name", metadata.second ?: JSONObject.NULL).put("sizeBytes", bytes.size)
+                .put("base64", Base64.encodeToString(bytes, Base64.NO_WRAP)).put("capturedAt", System.currentTimeMillis())
+            checkAccess()
+            result
+        } catch (_: SecurityException) {
+            throw ToolFailure("MEDIA_PERMISSION_REQUIRED", text(R.string.err_media_permission_required, reference.kind))
+        } catch (_: java.io.FileNotFoundException) {
+            throw ToolFailure("MEDIA_NOT_FOUND", text(R.string.err_media_not_found))
+        } catch (_: java.io.IOException) {
+            throw ToolFailure("MEDIA_UNAVAILABLE", text(R.string.err_media_unavailable))
+        } catch (_: IllegalArgumentException) {
+            throw ToolFailure("MEDIA_UNAVAILABLE", text(R.string.err_media_unavailable))
+        }
     }
 
     private suspend fun tap(args: JSONObject, ensure: () -> Unit): JSONObject {
@@ -315,6 +376,10 @@ class PhoneTools(private val service: BridgeService, private val prefs: BridgePr
             "phone_media" -> setOf("kind", "limit").also {
                 if (args.has("kind") && args.optString("kind") !in setOf("images", "videos", "all")) throw ToolFailure("INVALID_ARGUMENT", text(R.string.err_argument_invalid, "kind"))
                 range("limit", 1, 100)
+            }
+            "phone_media_read" -> setOf("uri", "maxBytes").also {
+                if (args.opt("uri") !is String || parseMediaUri(args.getString("uri")) == null) throw ToolFailure("INVALID_ARGUMENT", text(R.string.err_argument_invalid, "uri"))
+                range("maxBytes", 1, 4194304)
             }
             "phone_location" -> setOf("timeoutMs").also { range("timeoutMs", 1000, 20000) }
             "phone_ui" -> setOf("maxNodes").also { range("maxNodes", 1, 500) }

@@ -95,13 +95,14 @@ npm run test:android:boot -- emulator-5554
 | 新增交互设计 | 不可见父节点的可见后代、节点与坐标长按、四种按键、缩放比例、实际前台及暂停授权 | `DesignImprovementsTest`（由 smoke 脚本启动） |
 | 冷启动与本地解锁 | API 35 专用模拟器；重启后台恢复及本地合成锁屏凭据 | `test:android:boot`、`test:android:unlock` |
 | 非 Root Shizuku | API 35 专用模拟器，shell UID 2000；本地解锁、固定输入通道、断连与降级边界 | `test:android:unlock:shizuku` |
+| 剪贴板与媒体内容 | API 35 专用模拟器；真实 UID 2000 后台剪贴板、Android 媒体权限、独立授权、大小限制及 MCP 二进制内容 | `test:android:data` |
 | 交付 APK | 版本与递增 versionCode、原证书兼容、非调试标志、无测试夹具或运行配置、远端附件 SHA-256 | 发布前本地包审计及发布后重新下载核验 |
 
 具体提交的执行结果见仓库 [GitHub Actions](https://github.com/hsd221/android-phone-bridge/actions)。Lint 通过表示未发现阻止构建的错误，不代表没有警告；SDK、依赖及兼容性警告仍按实际报告记录。
 
 新增交互功能的自动化验证使用独立模拟器和合成内容。本版未重新执行物理真机回归，尚不能据此确认 HyperOS 等厂商系统的全部行为、长期休眠与切网恢复；Windows 11 本地真机部署也需要实际设备验证。
 
-> **CI 说明**：远程 GitHub Actions 构建环境显式指定 `platform-tools`、`platforms;android-35`、`platforms;android-36` 及 `build-tools;35.0.0`。Bridge 在 Ubuntu 与 Windows 上检查；Android 检查 Debug/Release 构建与 Lint，模拟器矩阵为 API 35、36、36.1，API 35 还执行开机恢复、本地解锁及非 Root Shizuku 专项。
+> **CI 说明**：远程 GitHub Actions 构建环境显式指定 `platform-tools`、`platforms;android-35`、`platforms;android-36` 及 `build-tools;35.0.0`。Bridge 在 Ubuntu 与 Windows 上检查；Android 检查 Debug/Release 构建与 Lint，模拟器矩阵为 API 35、36、36.1，API 35 还执行开机恢复、本地解锁、非 Root Shizuku 及剪贴板与媒体内容专项。
 
 ---
 
@@ -242,3 +243,21 @@ adb -s emulator-5554 shell am instrument -w -r \
 ```
 
 此专项验证使用模拟器合成画面，尚未验证实体手机镜头与厂商 ROM。Windows x64、Linux arm64 和远端 CI 尚未在本轮执行。候选未签名 Release APK 为 7,221,076 字节，相对先前已发布的签名 APK 增加约 0.45 MiB；签名方式不同会产生少量体积差异，手机安装后占用未单独测量。
+
+## 十五、后台剪贴板与有界媒体读取
+
+在专用 API 35 x86_64 模拟器上执行：
+
+```sh
+npm run test:android:data -- emulator-5554
+```
+
+脚本只接受显式 `emulator-*`，会清空测试应用数据、创建临时 Bridge 身份，并写入合成媒体与剪贴板。它核验固定版本 Shizuku APK 的 SHA-256，启动真实 shell UID 2000 服务，拒绝接管已有 Shizuku；结束时只停止本次创建的服务。可通过 `PHONE_BRIDGE_SHIZUKU_APK` 使用相同校验值的本地 APK 缓存。测试 Activity 和 provider 仅编入测试 APK。
+
+- `ClipboardTest` 在前台原生读取与外部测试应用处于前台时的 Shizuku 读取之间切换，检查文本与标签上限、非文本 URI 不被解引用、空值及后台拒绝都明确报错、读取后取消、锁屏拒绝、两级暂停与服务断开后的原生回退。
+- `MediaReadTest` 将合成 PNG、HEIC 与 MP4 通过真实 MediaStore 和 MCP 回传，逐字节核对图像或资源内容，检查恰好等于大小上限、超限拒绝、独立授权和升级迁移、对应图片/视频权限、两级暂停、条目缺失与任意 provider URI 拒绝。
+- `MediaContentTest` 与 Bridge 测试覆盖规范 URI、64 位 ID、MIME 集合约束、未知长度流只读到上限加一、逐块及流结束后的取消，以及 MCP 元数据不重复 Base64。MIME 错配和未知长度的边界使用纯函数测试，不以伪造系统 provider 代替 MediaStore 验证。
+
+2026-11-12，`0.3.1-pre.1 / versionCode 14` 的同证书非调试 Release 候选在专用 API 35 模拟器通过上述两项真实数据专项；Bridge 类型检查、构建与 23 项测试，Android 71 项 JVM 测试、双构建 Lint 及 Debug/Test/Release/demo 构建也通过。Lint 两种构建均为 0 个错误，仍各有 46 个警告和 1 项提示。
+
+模拟器结果不能替代厂商真机验证；不同 ROM 的剪贴板 Binder 契约和后台策略可能不同，未知契约会保守失败并返回不可用。

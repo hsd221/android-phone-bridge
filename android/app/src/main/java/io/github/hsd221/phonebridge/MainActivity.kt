@@ -217,6 +217,7 @@ class MainActivity : Activity() {
             Triple("phone_clipboard", getString(R.string.tool_clipboard), getString(R.string.tool_clipboard_detail)),
             Triple("phone_set_clipboard", getString(R.string.tool_set_clipboard), getString(R.string.tool_set_clipboard_detail)),
             Triple("phone_media", getString(R.string.tool_media), getString(R.string.tool_media_detail)),
+            Triple("phone_media_read", getString(R.string.tool_media_read), getString(R.string.tool_media_read_detail)),
             Triple("phone_location", getString(R.string.tool_location), getString(R.string.tool_location_detail)),
             Triple("phone_ui", getString(R.string.tool_ui), getString(R.string.tool_ui_detail)),
             Triple("phone_screenshot", getString(R.string.tool_screenshot), getString(R.string.tool_screenshot_detail)),
@@ -230,7 +231,7 @@ class MainActivity : Activity() {
             Triple("phone_lock", getString(R.string.tool_lock), getString(R.string.tool_lock_detail)),
         )
         val ids = listOf(
-            R.id.tool_device_info, R.id.tool_apps, R.id.tool_notifications, R.id.tool_clipboard, R.id.tool_set_clipboard, R.id.tool_media,
+            R.id.tool_device_info, R.id.tool_apps, R.id.tool_notifications, R.id.tool_clipboard, R.id.tool_set_clipboard, R.id.tool_media, R.id.tool_media_read,
             R.id.tool_location, R.id.tool_ui, R.id.tool_screenshot, R.id.tool_open_app,
             R.id.tool_tap, R.id.tool_swipe, R.id.tool_input, R.id.tool_back, R.id.tool_key, R.id.tool_unlock, R.id.tool_lock,
         )

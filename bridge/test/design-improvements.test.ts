@@ -68,7 +68,7 @@ test('status discovers bridge version and tool support with an offline or online
     assert(offline.ok);
     const data = offline.data as any;
     assert.equal(data.connected, false);
-    assert.equal(data.bridge.version, '0.3.0');
+    assert.equal(data.bridge.version, BRIDGE_VERSION);
     assert.equal(data.bridge.protocol, 1);
     assert.deepEqual([...data.bridge.supportedTools].sort(), Object.keys(toolInputs).sort());
     assert(!data.bridge.supportedTools.some((name: string) => /shell/i.test(name)));
